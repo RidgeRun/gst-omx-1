@@ -19,6 +19,7 @@ libgstomx_la_SOURCES = \
 	gstomxaudiodec.c \
 	gstomxaudioenc.c \
 	gstomxmjpegdec.c \
+	gstomxjpegenc.c \
 	gstomxmpeg4videodec.c \
 	gstomxmpeg2videodec.c \
 	gstomxh264dec.c \
@@ -48,6 +49,7 @@ noinst_HEADERS = \
 	gstomxaudiodec.h \
 	gstomxaudioenc.h \
 	gstomxmjpegdec.h \
+	gstomxjpegenc.h \
 	gstomxmpeg2videodec.h \
 	gstomxmpeg4videodec.h \
 	gstomxh264dec.h \
