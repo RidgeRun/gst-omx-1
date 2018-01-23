@@ -36,7 +36,8 @@ libgstomx_la_SOURCES = \
 	gstomxaudiosink.c \
 	gstomxanalogaudiosink.c \
 	gstomxhdmiaudiosink.c \
-	gstomxcamera.c
+	gstomxcamera.c \
+	gstomxtvp.c
 
 noinst_HEADERS = \
 	gstomx.h \
@@ -64,7 +65,8 @@ noinst_HEADERS = \
 	gstomxaudiosink.h \
 	gstomxanalogaudiosink.h \
 	gstomxhdmiaudiosink.h \
-	gstomxcamera.h
+	gstomxcamera.h \
+	gstomxtvp.h
 
 if !HAVE_EXTERNAL_OMX
 OMX_INCLUDEPATH = -I$(abs_srcdir)/openmax
