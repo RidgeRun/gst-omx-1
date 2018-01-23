@@ -35,7 +35,8 @@ libgstomx_la_SOURCES = \
 	gstomxamrdec.c \
 	gstomxaudiosink.c \
 	gstomxanalogaudiosink.c \
-	gstomxhdmiaudiosink.c	
+	gstomxhdmiaudiosink.c \
+	gstomxcamera.c
 
 noinst_HEADERS = \
 	gstomx.h \
@@ -62,21 +63,27 @@ noinst_HEADERS = \
 	gstomxamrdec.h \
 	gstomxaudiosink.h \
 	gstomxanalogaudiosink.h \
-	gstomxhdmiaudiosink.h 	
+	gstomxhdmiaudiosink.h \
+	gstomxcamera.h
 
 if !HAVE_EXTERNAL_OMX
 OMX_INCLUDEPATH = -I$(abs_srcdir)/openmax
 endif
 
+SHARED_INCLUDE = -I$(DEVDIR)/proprietary/ezsdk-5_05_02_00/ezsdk/linux-devkit/arm-none-linux-gnueabi/usr/include
+
 libgstomx_la_CFLAGS = \
 	-DGST_USE_UNSTABLE_API=1 \
+	$(OMXCORE_CFLAGS) \
 	$(OMX_INCLUDEPATH) \
+	$(SHARED_INCLUDE) \
 	$(GST_GL_CFLAGS) \
 	$(GST_PLUGINS_BASE_CFLAGS) \
 	$(GST_BASE_CFLAGS) \
 	$(GST_CFLAGS) \
 	$(GMODULE_NO_EXPORT_CFLAGS)
 libgstomx_la_LIBADD = \
+	$(OMXCORE_LIBS) \
 	$(GST_GL_LIBS) \
 	$(GST_PLUGINS_BASE_LIBS) \
 	-lgstaudio-@GST_API_VERSION@ \

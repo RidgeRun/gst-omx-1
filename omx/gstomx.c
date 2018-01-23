@@ -45,6 +45,7 @@
 #include "gstomxamrdec.h"
 #include "gstomxanalogaudiosink.h"
 #include "gstomxhdmiaudiosink.h"
+#include "gstomxcamera.h"
 
 GST_DEBUG_CATEGORY (gstomx_debug);
 #define GST_CAT_DEFAULT gstomx_debug
@@ -2276,7 +2277,7 @@ static const GGetTypeFunction types[] = {
   gst_omx_h264_enc_get_type, gst_omx_h263_enc_get_type,
   gst_omx_aac_enc_get_type, gst_omx_mjpeg_dec_get_type,
   gst_omx_aac_dec_get_type, gst_omx_mp3_dec_get_type,
-  gst_omx_amr_dec_get_type
+  gst_omx_amr_dec_get_type, gst_omx_camera_get_type
 #ifdef HAVE_VP8
       , gst_omx_vp8_dec_get_type
 #endif
