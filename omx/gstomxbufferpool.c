@@ -29,16 +29,8 @@
 GST_DEBUG_CATEGORY_STATIC (gst_omx_buffer_pool_debug_category);
 #define GST_CAT_DEFAULT gst_omx_buffer_pool_debug_category
 
-typedef struct _GstOMXMemory GstOMXMemory;
 typedef struct _GstOMXMemoryAllocator GstOMXMemoryAllocator;
 typedef struct _GstOMXMemoryAllocatorClass GstOMXMemoryAllocatorClass;
-
-struct _GstOMXMemory
-{
-  GstMemory mem;
-
-  GstOMXBuffer *buf;
-};
 
 struct _GstOMXMemoryAllocator
 {

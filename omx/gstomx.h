@@ -297,6 +297,11 @@ struct _GstOMXBuffer {
 
   /* TRUE if this is an EGLImage */
   gboolean eglimage;
+
+  /* GstBuffer containing a shared OMX buffer. Set it
+   * if this buffer should be unreferenced after the OMX
+   * component realeased it on Empty callback */
+   GstBuffer *gst_buf;
 };
 
 struct _GstOMXClassData {
