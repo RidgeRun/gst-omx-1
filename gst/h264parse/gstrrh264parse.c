@@ -92,6 +92,7 @@ static gboolean gst_rr_h264_parse_set_caps (GstBaseTransform * btrans,
     GstCaps * incaps, GstCaps * outcaps);
 static GstFlowReturn gst_rr_h264_parse_transform_ip (GstBaseTransform * trans,
     GstBuffer * buf);
+static gboolean gst_rr_h264_parse_stop (GstBaseTransform * btrans);
 
 static void
 gst_rr_h264_parse_class_init (GstRrH264ParseClass * klass)
@@ -118,6 +119,7 @@ gst_rr_h264_parse_class_init (GstRrH264ParseClass * klass)
       GST_DEBUG_FUNCPTR (gst_rr_h264_parse_set_caps);
   base_transform_class->transform_ip =
       GST_DEBUG_FUNCPTR (gst_rr_h264_parse_transform_ip);
+  base_transform_class->stop = GST_DEBUG_FUNCPTR (gst_rr_h264_parse_stop);
 
   gst_element_class_set_static_metadata (element_class,
       "H.264 parse element", "Codec/Parse/Converter/Video",
@@ -136,6 +138,7 @@ gst_rr_h264_parse_init (GstRrH264Parse * self)
   self->header_size = 0;
   self->set_codec_data = FALSE;
   self->single_nalu = GST_RR_H264_PARSE_SINGLE_NALU_DEFAULT;
+  self->caps = NULL;
 }
 
 static void
@@ -561,6 +564,16 @@ gst_rr_h264_parse_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
   return GST_FLOW_OK;
 }
 
+static gboolean
+gst_rr_h264_parse_stop (GstBaseTransform * btrans)
+{
+  GstRrH264Parse *self = GST_RR_H264_PARSE (btrans);
+
+  if (self->caps)
+    gst_caps_unref (self->caps);
+
+  return TRUE;
+}
 
 static gboolean
 rr_h264_parse_init (GstPlugin * self)
