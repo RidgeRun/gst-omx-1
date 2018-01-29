@@ -319,6 +319,7 @@ dnl *** plug-ins to include ***
 
 dnl these are all the gst plug-ins, compilable without additional libs
 AG_GST_CHECK_PLUGIN(omx)
+AG_GST_CHECK_PLUGIN(h264parse)
 
 dnl *** finalize CFLAGS, LDFLAGS, LIBS
 
@@ -386,6 +387,8 @@ dnl *** output files ***
 AC_CONFIG_FILES(
 Makefile
 omx/Makefile
+gst/Makefile
+gst/h264parse/Makefile
 common/Makefile
 common/m4/Makefile
 tools/Makefile
