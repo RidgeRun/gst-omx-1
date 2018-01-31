@@ -272,11 +272,17 @@ gst_omx_buffer_pool_set_config (GstBufferPool * bpool, GstStructure * config)
 {
   GstOMXBufferPool *pool = GST_OMX_BUFFER_POOL (bpool);
   GstCaps *caps;
+  guint min_buffers, max_buffers;
 
   GST_OBJECT_LOCK (pool);
 
-  if (!gst_buffer_pool_config_get_params (config, &caps, NULL, NULL, NULL))
+  if (!gst_buffer_pool_config_get_params (config, &caps, NULL, &min_buffers,
+          &max_buffers))
     goto wrong_config;
+
+  GST_DEBUG_OBJECT (bpool,
+      "Configuring pool %p min buffers:%d max buffers: %d",
+      pool, min_buffers, max_buffers);
 
   if (caps == NULL)
     goto no_caps;
@@ -341,7 +347,8 @@ gst_omx_buffer_pool_alloc_buffer (GstBufferPool * bpool,
 
   omx_buf = g_ptr_array_index (pool->port->buffers, pool->current_buffer_index);
   g_return_val_if_fail (omx_buf != NULL, GST_FLOW_ERROR);
-
+  GST_LOG_OBJECT (pool, "allocating buffer for OMX buffer %d:%p",
+      pool->current_buffer_index, omx_buf->omx_buf->pBuffer);
   if (pool->other_pool) {
     guint i, n;
 
@@ -519,6 +526,11 @@ gst_omx_buffer_pool_release_buffer (GstBufferPool * bpool, GstBuffer * buffer)
   GstOMXBufferPool *pool = GST_OMX_BUFFER_POOL (bpool);
   OMX_ERRORTYPE err;
   GstOMXBuffer *omx_buf;
+  GstMapInfo info;
+
+  gst_buffer_map (buffer, &info, GST_MAP_READ);
+  GST_LOG_OBJECT (pool, "releasing buffer %p with data %p", buffer, info.data);
+  gst_buffer_unmap (buffer, &info);
 
   g_assert (pool->component && pool->port);
 
@@ -606,6 +618,7 @@ gst_omx_buffer_pool_class_init (GstOMXBufferPoolClass * klass)
 static void
 gst_omx_buffer_pool_init (GstOMXBufferPool * pool)
 {
+  GST_DEBUG_OBJECT (pool, "Initializing OMX (non-queued) buffer pool %p", pool);
   pool->buffers = g_ptr_array_new ();
   pool->allocator = g_object_new (gst_omx_memory_allocator_get_type (), NULL);
 }
@@ -617,6 +630,8 @@ gst_omx_buffer_pool_new (GstElement * element, GstOMXComponent * component,
   GstOMXBufferPool *pool;
 
   pool = g_object_new (gst_omx_buffer_pool_get_type (), NULL);
+  GST_DEBUG_OBJECT (pool, "Created a new OMX buffer pool %p in buffer pool %p",
+      pool, GST_BUFFER_POOL (pool));
   pool->element = gst_object_ref (element);
   pool->component = component;
   pool->port = port;
