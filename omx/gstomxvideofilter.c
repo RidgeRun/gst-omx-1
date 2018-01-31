@@ -2056,6 +2056,11 @@ gst_omx_video_filter_component_init (GstOMXVideoFilter * self, GList * buffers)
           1 * GST_SECOND) != OMX_ErrorNone)
     return FALSE;
 
+  gst_omx_port_set_flushing (self->in_port, 5 * GST_SECOND, FALSE);
+  for (outport = self->out_port; outport; outport = outport->next) {
+    gst_omx_port_set_flushing (outport->data, 5 * GST_SECOND, FALSE);
+  }
+
   GST_DEBUG_OBJECT (self, "Changing state to Idle");
   if (gst_omx_component_set_state (self->comp, OMX_StateIdle) != OMX_ErrorNone)
     return FALSE;
