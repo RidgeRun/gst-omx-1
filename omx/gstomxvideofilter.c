@@ -2174,7 +2174,7 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
   GstOMXVideoFilterPrivate *priv = self->priv;
 
   GstOMXPort *port;
-  GstOMXBuffer *buf;
+  GstOMXBuffer *buf = NULL;
   OMX_ERRORTYPE err;
   GstOMXMemory *omxmem;
   GstOMXAcquireBufferReturn acq_ret = GST_OMX_ACQUIRE_BUFFER_ERROR;
