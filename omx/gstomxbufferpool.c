@@ -418,6 +418,9 @@ gst_omx_buffer_pool_alloc_buffer (GstBufferPool * bpool,
         offset[2] = offset[1] + (stride[1] * nslice / 2);
         break;
       case GST_VIDEO_FORMAT_NV12:
+        stride[1] = pool->port->port_def.format.video.nStride;
+        offset[1] =
+            stride[0] * (pool->port->port_def.format.video.nFrameHeight + 72);
       case GST_VIDEO_FORMAT_NV16:
         stride[1] = nstride;
         offset[1] = offset[0] + stride[0] * nslice;
@@ -449,7 +452,6 @@ gst_omx_buffer_pool_alloc_buffer (GstBufferPool * bpool,
 
       pool->need_copy = need_copy;
     }
-
     if (pool->need_copy || pool->add_videometa) {
       /* We always add the videometa. It's the job of the user
        * to copy the buffer if pool->need_copy is TRUE
