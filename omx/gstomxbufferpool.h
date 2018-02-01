@@ -28,6 +28,7 @@
 #include <gst/gst.h>
 #include <gst/video/gstvideometa.h>
 #include <gst/video/gstvideopool.h>
+#include <gst/gstatomicqueue.h>
 
 #include "gstomx.h"
 
@@ -86,12 +87,19 @@ struct _GstOMXBufferPool
   GstBufferPool *other_pool;
   GPtrArray *buffers;
 
+  /* Buffer queue */
+  GstAtomicQueue *queue;
+
   /* Used during acquire for output ports to
    * specify which buffer has to be retrieved
    * and during alloc, which buffer has to be
    * wrapped
    */
   gint current_buffer_index;
+
+  /* Acquire buffer helpers */
+  GCond acquired_cond;
+  GMutex acquired_mutex;
 };
 
 struct _GstOMXBufferPoolClass
