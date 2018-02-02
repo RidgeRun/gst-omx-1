@@ -216,6 +216,11 @@ gst_omx_buffer_pool_start (GstBufferPool * bpool)
     GST_OBJECT_UNLOCK (pool);
     return FALSE;
   }
+
+  if (!pool->component)
+    pool->queue =
+        gst_atomic_queue_new (pool->port->port_def.nBufferCountActual);
+
   GST_OBJECT_UNLOCK (pool);
 
   return
@@ -227,6 +232,9 @@ gst_omx_buffer_pool_stop (GstBufferPool * bpool)
 {
   GstOMXBufferPool *pool = GST_OMX_BUFFER_POOL (bpool);
   gint i = 0;
+
+  if (!pool->component)
+    while (gst_atomic_queue_pop (pool->queue));
 
   /* When not using the default GstBufferPool::GstAtomicQueue then
    * GstBufferPool::free_buffer is not called while stopping the pool
@@ -410,6 +418,9 @@ gst_omx_buffer_pool_alloc_buffer (GstBufferPool * bpool,
         offset[2] = offset[1] + (stride[1] * nslice / 2);
         break;
       case GST_VIDEO_FORMAT_NV12:
+        stride[1] = pool->port->port_def.format.video.nStride;
+        offset[1] =
+            stride[0] * (pool->port->port_def.format.video.nFrameHeight + 72);
       case GST_VIDEO_FORMAT_NV16:
         stride[1] = nstride;
         offset[1] = offset[0] + stride[0] * nslice;
@@ -441,7 +452,6 @@ gst_omx_buffer_pool_alloc_buffer (GstBufferPool * bpool,
 
       pool->need_copy = need_copy;
     }
-
     if (pool->need_copy || pool->add_videometa) {
       /* We always add the videometa. It's the job of the user
        * to copy the buffer if pool->need_copy is TRUE
@@ -488,8 +498,32 @@ static GstFlowReturn
 gst_omx_buffer_pool_acquire_buffer (GstBufferPool * bpool,
     GstBuffer ** buffer, GstBufferPoolAcquireParams * params)
 {
-  GstFlowReturn ret;
+  GstFlowReturn ret = GST_FLOW_OK;
   GstOMXBufferPool *pool = GST_OMX_BUFFER_POOL (bpool);
+  gboolean acquired = FALSE;
+  GTimeVal wait_end;
+
+  if (!pool->component) {
+    while (!acquired) {
+      *buffer = gst_atomic_queue_pop (pool->queue);
+      if (G_LIKELY (*buffer)) {
+        ret = GST_FLOW_OK;
+        GST_ERROR_OBJECT (pool, "acquired buffer %p", *buffer);
+        acquired = TRUE;
+      } else {
+        g_get_current_time (&wait_end);
+        g_time_val_add (&wait_end, 10);
+        ret = GST_FLOW_ERROR;
+        GST_WARNING_OBJECT (pool, "no more buffers");
+        /* Wait until a new buffer is released or timeout expired */
+        g_mutex_lock (&(pool->acquired_mutex));
+        g_cond_timed_wait (&(pool->acquired_cond), &(pool->acquired_mutex),
+            &wait_end);
+        g_mutex_unlock (&(pool->acquired_mutex));
+      }
+    }
+    goto done;
+  }
 
   if (pool->port->port_def.eDir == OMX_DirOutput) {
     GstBuffer *buf;
@@ -517,6 +551,7 @@ gst_omx_buffer_pool_acquire_buffer (GstBufferPool * bpool,
         (bpool, buffer, params);
   }
 
+done:
   return ret;
 }
 
@@ -531,6 +566,14 @@ gst_omx_buffer_pool_release_buffer (GstBufferPool * bpool, GstBuffer * buffer)
   gst_buffer_map (buffer, &info, GST_MAP_READ);
   GST_LOG_OBJECT (pool, "releasing buffer %p with data %p", buffer, info.data);
   gst_buffer_unmap (buffer, &info);
+
+  if (!pool->component) {
+    g_mutex_lock (&(pool->acquired_mutex));
+    gst_atomic_queue_push (pool->queue, buffer);
+    g_cond_broadcast (&(pool->acquired_cond));
+    g_mutex_unlock (&(pool->acquired_mutex));
+    return;
+  }
 
   g_assert (pool->component && pool->port);
 
@@ -581,6 +624,10 @@ gst_omx_buffer_pool_finalize (GObject * object)
     g_ptr_array_unref (pool->buffers);
   pool->buffers = NULL;
 
+  if (pool->queue)
+    gst_atomic_queue_unref (pool->queue);
+  pool->queue = NULL;
+
   if (pool->other_pool)
     gst_object_unref (pool->other_pool);
   pool->other_pool = NULL;
@@ -618,7 +665,8 @@ gst_omx_buffer_pool_class_init (GstOMXBufferPoolClass * klass)
 static void
 gst_omx_buffer_pool_init (GstOMXBufferPool * pool)
 {
-  GST_DEBUG_OBJECT (pool, "Initializing OMX (non-queued) buffer pool %p", pool);
+  GST_DEBUG_OBJECT (pool, "Initializing OMX buffer pool %p", pool);
+  pool->queue = NULL;
   pool->buffers = g_ptr_array_new ();
   pool->allocator = g_object_new (gst_omx_memory_allocator_get_type (), NULL);
 }

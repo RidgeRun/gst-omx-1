@@ -74,6 +74,10 @@ struct _GstOMXVideoDec
   /* TRUE if EOS buffers shouldn't be forwarded */
   gboolean draining;
 
+  /* Control inport and outport buffers */
+  guint output_buffers;
+  guint input_buffers;
+
   /* TRUE if upstream is EOS */
   gboolean eos;
 

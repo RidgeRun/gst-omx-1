@@ -83,11 +83,19 @@ static OMX_ERRORTYPE gst_omx_video_dec_allocate_output_buffers (GstOMXVideoDec *
     self);
 static OMX_ERRORTYPE gst_omx_video_dec_deallocate_output_buffers (GstOMXVideoDec
     * self);
-
+static void gst_omx_video_dec_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec);
+static void gst_omx_video_dec_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec);
 enum
 {
-  PROP_0
+  PROP_0,
+  PROP_OUTPUT_BUFFERS,
+  PROP_INPUT_BUFFERS
 };
+
+#define GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT 10
+#define GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT 4
 
 /* class initialization */
 
@@ -107,6 +115,18 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
   GstVideoDecoderClass *video_decoder_class = GST_VIDEO_DECODER_CLASS (klass);
 
   gobject_class->finalize = gst_omx_video_dec_finalize;
+  gobject_class->set_property = gst_omx_video_dec_set_property;
+  gobject_class->get_property = gst_omx_video_dec_get_property;
+
+  g_object_class_install_property (gobject_class, PROP_OUTPUT_BUFFERS,
+      g_param_spec_uint ("output-buffers", "Output buffers",
+      "The amount of OMX output buffers",
+      1, 16, GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_INPUT_BUFFERS,
+      g_param_spec_uint ("input-buffers", "Input buffers",
+      "The amount of OMX input buffers",
+      1, 16, GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 
   element_class->change_state =
       GST_DEBUG_FUNCPTR (gst_omx_video_dec_change_state);
@@ -140,6 +160,8 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
 static void
 gst_omx_video_dec_init (GstOMXVideoDec * self)
 {
+  self->output_buffers = GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT;
+  self->input_buffers = GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT;
   gst_video_decoder_set_packetized (GST_VIDEO_DECODER (self), TRUE);
   gst_video_decoder_set_use_default_pad_acceptcaps (GST_VIDEO_DECODER_CAST
       (self), TRUE);
@@ -342,6 +364,44 @@ gst_omx_video_dec_finalize (GObject * object)
   g_cond_clear (&self->drain_cond);
 
   G_OBJECT_CLASS (gst_omx_video_dec_parent_class)->finalize (object);
+}
+
+static void
+gst_omx_video_dec_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstOMXVideoDec *self = GST_OMX_VIDEO_DEC (object);
+
+  switch (prop_id) {
+    case PROP_OUTPUT_BUFFERS:
+      self->output_buffers = g_value_get_uint (value);
+      break;
+    case PROP_INPUT_BUFFERS:
+      self->input_buffers = g_value_get_uint (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_omx_video_dec_get_property (GObject * object, guint prop_id, GValue * value,
+    GParamSpec * pspec)
+{
+  GstOMXVideoDec *self = GST_OMX_VIDEO_DEC (object);
+
+  switch (prop_id) {
+    case PROP_OUTPUT_BUFFERS:
+      g_value_set_uint (value, self->output_buffers);
+      break;
+    case PROP_INPUT_BUFFERS:
+      g_value_set_uint (value, self->input_buffers);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
 }
 
 static GstStateChangeReturn
@@ -585,7 +645,7 @@ gst_omx_video_dec_allocate_output_buffers (GstOMXVideoDec * self)
     }
 
     /* Need at least 2 buffers for anything meaningful */
-    min = MAX (MAX (min, port->port_def.nBufferCountMin), 4);
+    min = MAX (MAX (min, self->output_buffers), 4);
     if (max == 0) {
       max = min;
     } else if (max < port->port_def.nBufferCountMin || max < 2) {
@@ -2012,8 +2072,7 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (self, "Updating inport port definition");
 
-  // TODO: Update: Wire to self->input_buffers;
-  port_def.nBufferCountActual = 4;
+  port_def.nBufferCountActual = self->input_buffers;
   if (gst_omx_port_update_port_definition (self->dec_in_port,
           &port_def) != OMX_ErrorNone)
     return FALSE;
@@ -2050,8 +2109,7 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (self, "Updating outport port definition");
 
-  // TODO: Update: Wire to self->output_buffers;
-  port_def.nBufferCountActual = 10;
+  port_def.nBufferCountActual = self->output_buffers;
   if (gst_omx_port_update_port_definition (self->dec_out_port,
           &port_def) != OMX_ErrorNone)
     return FALSE;
