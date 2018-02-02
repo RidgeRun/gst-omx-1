@@ -128,7 +128,7 @@ free_frame_array (gpointer key, gpointer value, gpointer user_data)
 {
   g_ptr_array_foreach ((GPtrArray *) value, (GFunc) gst_video_codec_frame_unref,
       NULL);
-  g_ptr_array_free ((GPtrArray *) value, FALSE);
+  g_ptr_array_free ((GPtrArray *) value, TRUE);
 }
 
 
@@ -354,9 +354,8 @@ gst_omx_video_filter_init (GstOMXVideoFilter * self,
   self->input_buffers = GST_OMX_VIDEO_FILTER_INPUT_BUFFERS_DEFAULT;
   self->output_buffers = GST_OMX_VIDEO_FILTER_OUTPUT_BUFFERS_DEFAULT;
 
-  gst_omx_video_filter_reset (self);
-
   g_rec_mutex_init (&self->stream_lock);
+  gst_omx_video_filter_reset (self);
 }
 
 static GstVideoCodecFrame *
@@ -1410,7 +1409,9 @@ gst_omx_video_filter_find_transform (GstOMXVideoFilter * self,
         GST_DEBUG_PAD_NAME (srcpad));
     /* note that we pass the complete array of structures to the fixate
      * function, it needs to truncate itself */
-    srccaps = klass->fixate_caps (self, srcpad, caps, srccaps);
+    GstCaps *fixedcaps = klass->fixate_caps (self, srcpad, caps, srccaps);
+    gst_caps_unref (srccaps);
+    srccaps = fixedcaps;
     is_fixed = gst_caps_is_fixed (srccaps);
     GST_DEBUG_OBJECT (self, "after fixating %" GST_PTR_FORMAT, srccaps);
   }
@@ -1735,7 +1736,7 @@ gst_omx_video_filter_open (GstOMXVideoFilter * self)
     self->out_port = g_list_append (self->out_port, port);
     gst_pad_set_element_private (srcpad->data, port);
 
-    /* Allocate output buffer poool */
+    /* Allocate output buffer pool */
     pool = gst_omx_buffer_pool_new (GST_ELEMENT (self), self->comp, port);
     if (!pool)
       goto pool_failed;
@@ -1813,8 +1814,13 @@ gst_omx_video_filter_close (GstOMXVideoFilter * self)
   if (!gst_omx_video_filter_shutdown (self))
     return FALSE;
 
-  if (priv->output_pool)
-    g_list_foreach (priv->output_pool, (GFunc) gst_object_unref, NULL);
+  if (priv->output_pool) {
+    //g_list_foreach (priv->output_pool, (GFunc) g_list_remove_all, NULL);
+    //for (GList* outpool = priv->output_pool; outpool; outpool = outpool->next) {
+    //  g_object_unref(outpool->data);
+    //}
+    g_list_free (priv->output_pool);
+  }
   priv->output_pool = NULL;
 
   self->in_port = NULL;
