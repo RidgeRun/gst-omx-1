@@ -1067,6 +1067,11 @@ gst_omx_video_filter_finalize (GObject * object)
   GST_LOG_OBJECT (self, "finalize");
 
   g_rec_mutex_clear (&self->stream_lock);
+  if (self->srcpads) {
+    g_list_foreach (self->srcpads, (GFunc) gst_object_unref, NULL);
+    g_list_free (self->srcpads);
+  }
+  self->srcpads = NULL;
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -1815,10 +1820,7 @@ gst_omx_video_filter_close (GstOMXVideoFilter * self)
     return FALSE;
 
   if (priv->output_pool) {
-    //g_list_foreach (priv->output_pool, (GFunc) g_list_remove_all, NULL);
-    //for (GList* outpool = priv->output_pool; outpool; outpool = outpool->next) {
-    //  g_object_unref(outpool->data);
-    //}
+    g_list_foreach (priv->output_pool, (GFunc) gst_object_unref, NULL);
     g_list_free (priv->output_pool);
   }
   priv->output_pool = NULL;
