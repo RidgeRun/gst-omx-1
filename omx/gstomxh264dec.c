@@ -107,25 +107,9 @@ gst_omx_h264_dec_is_format_change (GstOMXVideoDec * dec,
       || g_strcmp0 (old_level, new_level) != 0) {
     return TRUE;
   }
-
   return FALSE;
 }
 
-#if 0
-static gboolean
-gst_omx_h264_dec_set_format (GstOMXVideoDec * dec, GstOMXPort * port,
-    GstVideoCodecState * state)
-{
-  gboolean ret;
-  OMX_PARAM_PORTDEFINITIONTYPE port_def;
-
-  gst_omx_port_get_port_definition (port, &port_def);
-  port_def.format.video.eCompressionFormat = OMX_VIDEO_CodingAVC;
-  ret = gst_omx_port_update_port_definition (port, &port_def) == OMX_ErrorNone;
-
-  return ret;
-}
-#else
 static gboolean
 gst_omx_h264_dec_set_format (GstOMXVideoDec * dec, GstOMXPort * port,
     GstVideoCodecState * state)
@@ -245,4 +229,3 @@ unsupported_level:
   gst_caps_unref (peercaps);
   return FALSE;
 }
-#endif
