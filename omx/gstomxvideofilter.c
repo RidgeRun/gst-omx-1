@@ -1068,7 +1068,6 @@ gst_omx_video_filter_finalize (GObject * object)
 
   g_rec_mutex_clear (&self->stream_lock);
   if (self->srcpads) {
-    g_list_foreach (self->srcpads, (GFunc) gst_object_unref, NULL);
     g_list_free (self->srcpads);
   }
   self->srcpads = NULL;
