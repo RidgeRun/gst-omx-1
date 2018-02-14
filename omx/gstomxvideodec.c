@@ -81,7 +81,8 @@ enum
 
 #define GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT 10
 #define GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT 4
-#define GST_OMX_VIDEO_DEC_VERTICAL_PADDING 84
+#define GST_OMX_VIDEO_DEC_CHROMA_Y_OFFSET 89
+#define GST_OMX_VIDEO_DEC_CHROMA_X_OFFSET 1150
 
 /* class initialization */
 
@@ -412,13 +413,31 @@ gst_omx_video_dec_fill_buffer (GstOMXVideoDec * self,
     const guint nslice = port_def->format.video.nSliceHeight;
     guint src_stride[GST_VIDEO_MAX_PLANES] = { nstride, 0, };
     guint src_size[GST_VIDEO_MAX_PLANES] = { nstride * nslice, 0, };
-    gint dst_width[GST_VIDEO_MAX_PLANES] = { 0, };
+    gint dst_width[GST_VIDEO_MAX_PLANES] = { 0, 0};
     gint dst_height[GST_VIDEO_MAX_PLANES] =
         { GST_VIDEO_INFO_HEIGHT (vinfo), 0, };
     const guint8 *src;
     guint p;
 
     switch (GST_VIDEO_INFO_FORMAT (vinfo)) {
+      case GST_VIDEO_FORMAT_NV12:
+        src_stride[1] = nstride;
+        src_size[1] = src_stride[1] * nslice / 2;
+        dst_width[0] = port_def->format.video.nFrameWidth;
+        dst_width[1] = port_def->format.video.nFrameWidth;
+        dst_height[1] = port_def->format.video.nFrameHeight / 2;
+        break;
+      case GST_VIDEO_FORMAT_I420:
+        dst_width[0] = GST_VIDEO_INFO_WIDTH (vinfo);
+        src_stride[1] = nstride / 2;
+        src_size[1] = (src_stride[1] * nslice) / 2;
+        dst_width[1] = GST_VIDEO_INFO_WIDTH (vinfo) / 2;
+        dst_height[1] = GST_VIDEO_INFO_HEIGHT (vinfo) / 2;
+        src_stride[2] = nstride / 2;
+        src_size[2] = (src_stride[1] * nslice) / 2;
+        dst_width[2] = GST_VIDEO_INFO_WIDTH (vinfo) / 2;
+        dst_height[2] = GST_VIDEO_INFO_HEIGHT (vinfo) / 2;
+        break;
       case GST_VIDEO_FORMAT_ABGR:
       case GST_VIDEO_FORMAT_ARGB:
         dst_width[0] = GST_VIDEO_INFO_WIDTH (vinfo) * 4;
@@ -433,24 +452,6 @@ gst_omx_video_dec_fill_buffer (GstOMXVideoDec * self,
       case GST_VIDEO_FORMAT_GRAY8:
         dst_width[0] = GST_VIDEO_INFO_WIDTH (vinfo);
         break;
-      case GST_VIDEO_FORMAT_I420:
-        dst_width[0] = GST_VIDEO_INFO_WIDTH (vinfo);
-        src_stride[1] = nstride / 2;
-        src_size[1] = (src_stride[1] * nslice) / 2;
-        dst_width[1] = GST_VIDEO_INFO_WIDTH (vinfo) / 2;
-        dst_height[1] = GST_VIDEO_INFO_HEIGHT (vinfo) / 2;
-        src_stride[2] = nstride / 2;
-        src_size[2] = (src_stride[1] * nslice) / 2;
-        dst_width[2] = GST_VIDEO_INFO_WIDTH (vinfo) / 2;
-        dst_height[2] = GST_VIDEO_INFO_HEIGHT (vinfo) / 2;
-        break;
-      case GST_VIDEO_FORMAT_NV12:
-        dst_width[0] = GST_VIDEO_INFO_WIDTH (vinfo);
-        src_stride[1] = nstride;
-        src_size[1] = src_stride[1] * nslice / 2;
-        dst_width[1] = GST_VIDEO_INFO_WIDTH (vinfo);
-        dst_height[1] = GST_VIDEO_INFO_HEIGHT (vinfo) / 2;
-        break;
       case GST_VIDEO_FORMAT_NV16:
         dst_width[0] = GST_VIDEO_INFO_WIDTH (vinfo);
         src_stride[1] = nstride;
@@ -464,19 +465,21 @@ gst_omx_video_dec_fill_buffer (GstOMXVideoDec * self,
     }
 
     src = inbuf->omx_buf->pBuffer + inbuf->omx_buf->nOffset;
+
     for (p = 0; p < GST_VIDEO_INFO_N_PLANES (vinfo); p++) {
       const guint8 *data;
       guint8 *dst;
       guint h;
 
       dst = GST_VIDEO_FRAME_PLANE_DATA (&frame, p);
-#ifdef GST_OMX_VIDEO_DEC_VERTICAL_PADDING
-      if (p == 1)
-        src +=
-            port_def->format.video.nSliceHeight *
-            port_def->format.video.nStride +
-            GST_OMX_VIDEO_DEC_VERTICAL_PADDING * port_def->format.video.nStride;
-#endif
+
+      /* chroma plane write adjustment */
+      if (p == 1) {
+        src += GST_VIDEO_FRAME_PLANE_STRIDE (&frame, p)
+            * GST_OMX_VIDEO_DEC_CHROMA_Y_OFFSET
+            + GST_OMX_VIDEO_DEC_CHROMA_X_OFFSET;
+      }
+
       data = src;
       for (h = 0; h < dst_height[p]; h++) {
         memcpy (dst, data, dst_width[p]);
@@ -986,7 +989,6 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
     frame = NULL;
   } else if (!frame && (buf->omx_buf->nFilledLen > 0 || buf->eglimage)) {
     GstBuffer *outbuf = NULL;
-
     /* This sometimes happens at EOS or if the input is not properly framed,
      * let's handle it gracefully by allocating a new buffer for the current
      * caps and filling it
@@ -1030,7 +1032,7 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
 
     flow_ret = gst_pad_push (GST_VIDEO_DECODER_SRC_PAD (self), outbuf);
   } else if (buf->omx_buf->nFilledLen > 0 || buf->eglimage) {
-    if (self->out_port_pool) {
+    if (!self->out_port_pool) {
       gint i, n;
       GstBuffer *outbuf;
       GstBufferPoolAcquireParams params = { 0, };
@@ -1045,9 +1047,11 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
       g_assert (i != n);
 
       GST_OMX_BUFFER_POOL (self->out_port_pool)->current_buffer_index = i;
+
       flow_ret =
           gst_buffer_pool_acquire_buffer (self->out_port_pool,
           &frame->output_buffer, &params);
+
       if (flow_ret != GST_FLOW_OK) {
         flow_ret =
             gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
@@ -1574,9 +1578,10 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
   else
     port_def.format.video.xFramerate = (info->fps_n << 16) / (info->fps_d);
 
+  port_def.nBufferCountActual = self->input_buffers;
+
   GST_DEBUG_OBJECT (self, "Updating inport port definition");
 
-  port_def.nBufferCountActual = self->input_buffers;
   if (gst_omx_port_update_port_definition (self->dec_in_port,
           &port_def) != OMX_ErrorNone)
     return FALSE;
@@ -1611,11 +1616,11 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
       port_def.format.video.xFramerate = (info->fps_n) / (info->fps_d);
   }
 
-  GST_DEBUG_OBJECT (self, "Updating outport port definition");
-
   port_def.nBufferCountActual = self->output_buffers;
+
+  GST_DEBUG_OBJECT (self, "Updating outport port definition");
   if (gst_omx_port_update_port_definition (self->dec_out_port,
-          &port_def) != OMX_ErrorNone)
+      &port_def) != OMX_ErrorNone)
     return FALSE;
 
   gst_buffer_replace (&self->codec_data, state->codec_data);
