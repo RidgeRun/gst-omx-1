@@ -114,7 +114,8 @@ gst_omx_camera_capt_mode_get_type (void)
   static const GEnumValue capt_mode_types[] = {
     {OMX_VIDEO_CaptureModeSC_NON_MUX, "Non multiplexed", "nmux"},
     {OMX_VIDEO_CaptureModeMC_LINE_MUX, "Line multiplexed ", "lmux"},
-    {OMX_VIDEO_CaptureModeSC_DISCRETESYNC_ACTVID_VSYNC, "Discrete sync", "dsync"},
+    {OMX_VIDEO_CaptureModeSC_DISCRETESYNC_ACTVID_VSYNC, "Discrete sync",
+        "dsync"},
     {0, NULL, NULL}
   };
 
@@ -842,7 +843,7 @@ gst_omx_camera_open (GstOMXCamera * self)
 
   gst_pad_set_element_private (GST_BASE_SRC_PAD (self), self->outport);
 
-  /* Allocate output buffer poool */
+  /* Allocate output buffer pool */
   pool =
       gst_omx_buffer_pool_new (GST_ELEMENT (self), self->comp, self->outport);
   if (!pool)

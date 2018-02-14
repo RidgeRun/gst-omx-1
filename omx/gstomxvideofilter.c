@@ -639,6 +639,8 @@ gst_omx_video_filter_output_loop (GstPad * pad)
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_FLUSHING) {
     goto flushing;
   } else if (acq_return != GST_OMX_ACQUIRE_BUFFER_OK) {
+    /* The gst_pad_get_parent function increases the refcount of the parent object */
+    gst_object_unref (self);
     return;
   }
   /* This prevents a deadlock between the srcpad stream
@@ -676,6 +678,8 @@ gst_omx_video_filter_output_loop (GstPad * pad)
     goto flow_error;
 
   GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+  /* The gst_pad_get_parent function increases the refcount of the parent object */
+  gst_object_unref (self);
   return;
 
 component_error:
@@ -688,6 +692,8 @@ component_error:
     gst_pad_pause_task (pad);
     priv->downstream_flow_ret = GST_FLOW_ERROR;
     priv->started = FALSE;
+    /* The gst_pad_get_parent function increases the refcount of the parent object */
+    gst_object_unref (self);
     return;
   }
 flushing:
@@ -696,6 +702,8 @@ flushing:
     gst_pad_pause_task (pad);
     priv->downstream_flow_ret = GST_FLOW_FLUSHING;
     priv->started = FALSE;
+    /* The gst_pad_get_parent function increases the refcount of the parent object */
+    gst_object_unref (self);
     return;
   }
 
@@ -715,6 +723,8 @@ flow_error:
     }
     priv->started = FALSE;
     GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+    /* The gst_pad_get_parent function increases the refcount of the parent object */
+    gst_object_unref (self);
     return;
   }
 release_error:
@@ -727,6 +737,8 @@ release_error:
     priv->downstream_flow_ret = GST_FLOW_ERROR;
     priv->started = FALSE;
     GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+    /* The gst_pad_get_parent function increases the refcount of the parent object */
+    gst_object_unref (self);
     return;
   }
 }
