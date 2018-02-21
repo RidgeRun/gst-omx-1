@@ -146,8 +146,6 @@ gst_omx_video_dec_init (GstOMXVideoDec * self)
   self->output_buffers = GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT;
   self->input_buffers = GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT;
   gst_video_decoder_set_packetized (GST_VIDEO_DECODER (self), TRUE);
-  gst_video_decoder_set_use_default_pad_acceptcaps (GST_VIDEO_DECODER_CAST
-      (self), TRUE);
   GST_PAD_SET_ACCEPT_TEMPLATE (GST_VIDEO_DECODER_SINK_PAD (self));
 
   g_mutex_init (&self->drain_lock);
@@ -1032,7 +1030,7 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
 
     flow_ret = gst_pad_push (GST_VIDEO_DECODER_SRC_PAD (self), outbuf);
   } else if (buf->omx_buf->nFilledLen > 0 || buf->eglimage) {
-    if (!self->out_port_pool) {
+    if (self->out_port_pool) {
       gint i, n;
       GstBuffer *outbuf;
       GstBufferPoolAcquireParams params = { 0, };
