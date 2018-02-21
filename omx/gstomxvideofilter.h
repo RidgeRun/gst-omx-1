@@ -80,7 +80,7 @@ struct _GstOMXVideoFilter
   gboolean always_copy;
   guint output_buffers;
   guint input_buffers;
-  
+
   /*< private > */
   GstOMXVideoFilterPrivate *priv;
 
@@ -105,6 +105,9 @@ struct _GstOMXVideoFilter
  *                  Notifies subclass of incoming data format. @ininfo
  *                  and @outinfo_list are already been set acording
  *                  to the provided and negotiated caps.
+ * @fixed_src_caps:  Optional.
+ *                   Given the @srcpad, returns fixated caps based on pad
+ *                   template, @incaps and peer intersect.
  */
 struct _GstOMXVideoFilterClass
 {
@@ -122,6 +125,8 @@ struct _GstOMXVideoFilterClass
   gboolean  (*set_format) (GstOMXVideoFilter * self,
       GstCaps * incaps, GstVideoInfo * ininfo, GList * outcaps_list,
       GList * outinfo_list);
+  GstCaps *(*fixed_src_caps) (GstOMXVideoFilter * self, GstCaps * incaps,
+      GstPad * srcpad);
 };
 
 GType gst_omx_video_filter_get_type (void);

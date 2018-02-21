@@ -44,7 +44,8 @@ static GstCaps *gst_omx_scaler_transform_caps (GstOMXVideoFilter * self,
 static gboolean gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter,
     GstCaps * incaps, GstVideoInfo * ininfo, GList * outcaps_list,
     GList * outinfo_list);
-
+static GstCaps *gst_omx_scaler_fixed_src_caps (GstOMXVideoFilter * self,
+    GstCaps * incaps, GstPad * srcpad);
 static GstCaps *gst_omx_scaler_fixate_caps (GstOMXVideoFilter * self,
     GstPad * srcpad, GstCaps * sinkcaps, GstCaps * srccaps);
 enum
@@ -83,11 +84,9 @@ gst_omx_scaler_class_init (GstOMXScalerClass * klass)
       "height=(int) [ 16, 1080 ], " "framerate = " GST_VIDEO_FPS_RANGE;
   videofilter_class->cdata.default_sink_template_caps =
       "video/x-raw, " "format=(string)NV12,  width=(int) [ 16, 1920 ], "
-      "height = (int) [ 16, 1080 ], framerate = " GST_VIDEO_FPS_RANGE;
-  videofilter_class->fixate_caps =
-      GST_DEBUG_FUNCPTR (gst_omx_scaler_fixate_caps);
-  videofilter_class->transform_caps =
-      GST_DEBUG_FUNCPTR (gst_omx_scaler_transform_caps);
+      "height = (int) [ 16, 1200 ], framerate = " GST_VIDEO_FPS_RANGE;
+  videofilter_class->fixed_src_caps =
+      GST_DEBUG_FUNCPTR (gst_omx_scaler_fixed_src_caps);
   videofilter_class->set_format = GST_DEBUG_FUNCPTR (gst_omx_scaler_set_format);
   gst_element_class_set_static_metadata (element_class,
       "OpenMAX Video Scaler",
@@ -145,7 +144,8 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (videofilter, "setting input resolution");
+  GST_DEBUG_OBJECT (videofilter, "Setting channel resolution fields");
+
   GST_OMX_INIT_STRUCT (&channel_resolution);
   channel_resolution.Frm0Width = GST_VIDEO_INFO_WIDTH (ininfo);
   channel_resolution.Frm0Height = GST_VIDEO_INFO_HEIGHT (ininfo);
@@ -155,10 +155,17 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
   channel_resolution.Frm1Pitch = 0;
   channel_resolution.FrmStartX = 0;
   channel_resolution.FrmStartY = 0;
-  channel_resolution.FrmCropWidth = 0;
-  channel_resolution.FrmCropHeight = 0;
+  channel_resolution.FrmCropWidth = GST_VIDEO_INFO_WIDTH (ininfo);
+  channel_resolution.FrmCropHeight = GST_VIDEO_INFO_HEIGHT (ininfo);
   channel_resolution.eDir = OMX_DirInput;
   channel_resolution.nChId = 0;
+
+  GST_DEBUG_OBJECT (videofilter, "Setting input channel resolution with
+      Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
+      channel_resolution.Frm0Width, channel_resolution.Frm0Height,
+      channel_resolution.Frm0Pitch, channel_resolution.FrmCropWidth,
+      channel_resolution.FrmCropHeight);
+
   err = gst_omx_component_set_config (videofilter->comp,
       OMX_TI_IndexConfigVidChResolution, &channel_resolution);
   if (err != OMX_ErrorNone) {
@@ -168,7 +175,6 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (videofilter, "setting output resolution");
   GST_OMX_INIT_STRUCT (&channel_resolution);
   channel_resolution.Frm0Width =
       GST_VIDEO_INFO_WIDTH ((GstVideoInfo *) outinfo_list->data);
@@ -185,16 +191,23 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
   channel_resolution.FrmCropHeight = 0;
   channel_resolution.eDir = OMX_DirOutput;
   channel_resolution.nChId = 0;
+
+  GST_DEBUG_OBJECT (videofilter, "Setting output channel resolution with
+      Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
+      channel_resolution.Frm0Width, channel_resolution.Frm0Height,
+      channel_resolution.Frm0Pitch, channel_resolution.FrmCropWidth,
+      channel_resolution.FrmCropHeight);
+
   err = gst_omx_component_set_config (videofilter->comp,
       OMX_TI_IndexConfigVidChResolution, &channel_resolution);
   if (err != OMX_ErrorNone) {
     GST_ERROR_OBJECT (videofilter,
-        "failed to set output channel resolution: %s (0x%08x) ",
+        "Failed to set output channel resolution: %s (0x%08x) ",
         gst_omx_error_to_string (err), err);
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (videofilter, "disable algorithm bypass mode");
+  GST_DEBUG_OBJECT (videofilter, "Setting bypass mode algorithm");
   GST_OMX_INIT_STRUCT (&alg_enable);
   alg_enable.nPortIndex = 0;
   alg_enable.nChId = 0;
@@ -203,7 +216,7 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
       OMX_TI_IndexConfigAlgEnable, &alg_enable);
   if (err != OMX_ErrorNone) {
     GST_ERROR_OBJECT (videofilter,
-        "failed to set disable algorithm bypass mode: %s (0x%08x) ",
+        "Failed to set algorithm bypass mode: %s (0x%08x) ",
         gst_omx_error_to_string (err), err);
     return FALSE;
   }
@@ -339,4 +352,62 @@ gst_omx_scaler_transform_caps (GstOMXVideoFilter * videofilter,
   GST_DEBUG_OBJECT (videofilter, "returning caps: %" GST_PTR_FORMAT, retcaps);
 
   return retcaps;
+}
+
+static GstCaps *
+gst_omx_scaler_fixed_src_caps (GstOMXVideoFilter * self,
+    GstCaps * incaps, GstPad * srcpad)
+{
+  GstCaps *intersection;
+  GstCaps *srctempl;
+  GstCaps *srccaps;
+  GstPad *srcpeer;
+  GstCaps *peercaps;
+  gboolean is_fixed;
+  gchar *caps_str = NULL;
+
+  srctempl = gst_pad_get_pad_template_caps (srcpad);
+
+  /* first lets see what the peer has to offer */
+  srcpeer = gst_pad_get_peer (srcpad);
+  peercaps = gst_pad_query_caps (srcpeer, srctempl);
+
+  intersection =
+      gst_caps_intersect_full (srctempl, peercaps, GST_CAPS_INTERSECT_FIRST);
+  gst_caps_unref (peercaps);
+
+  srccaps = gst_caps_is_empty (intersection) ? gst_caps_ref (srctempl) :
+      gst_caps_ref (intersection);
+  gst_caps_unref (intersection);
+  gst_caps_unref (srctempl);
+
+  GST_DEBUG_OBJECT (self, "intersect with peercaps (%" GST_PTR_FORMAT "): %s",
+      srccaps, caps_str = gst_caps_to_string (srccaps));
+  if (caps_str)
+    g_free (caps_str);
+
+  /* now lets intersect with incoming caps */
+  intersection =
+      gst_caps_intersect_full (srccaps, incaps, GST_CAPS_INTERSECT_FIRST);
+  srccaps =
+      gst_caps_is_empty (intersection) ? gst_caps_ref (srccaps) :
+      gst_caps_ref (intersection);
+  gst_caps_unref (intersection);
+
+  GST_DEBUG_OBJECT (self, "intersect with incaps (%" GST_PTR_FORMAT "): %s",
+      srccaps, caps_str = gst_caps_to_string (srccaps));
+  if (caps_str)
+    g_free (caps_str);
+
+  srccaps = gst_caps_fixate (srccaps);
+
+  if (srcpeer)
+    gst_object_unref (srcpeer);
+
+  GST_DEBUG_OBJECT (self, "fixated to (%" GST_PTR_FORMAT "): %s", srccaps,
+      caps_str = gst_caps_to_string (srccaps));
+  if (caps_str)
+    g_free (caps_str);
+
+  return srccaps;
 }

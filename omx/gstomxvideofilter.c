@@ -551,7 +551,7 @@ gst_omx_video_filter_handle_output_frame (GstOMXVideoFilter * self,
   gint idx, n, i;
 
   if (buf->omx_buf->nFilledLen > 0) {
-    GstBuffer *outbuf;
+    GstBuffer *outbuf = NULL;
     GstMapInfo map = GST_MAP_INFO_INIT;
 
     GST_LOG_OBJECT (self, "Handling output data");
@@ -1035,7 +1035,7 @@ gst_omx_video_filter_sink_get_caps (GstOMXVideoFilter * self, GstCaps * filter)
   GstCaps *caps = NULL;
   gchar *caps_str = NULL;
 
-  caps = gst_omx_video_filter_proxy_get_caps (self, NULL, filter);
+  caps = gst_pad_get_pad_template_caps (self->sinkpad);
 
   GST_LOG_OBJECT (self, "Returning caps %" GST_PTR_FORMAT " %s", caps,
       caps_str = gst_caps_to_string (caps));
@@ -1241,9 +1241,28 @@ gst_omx_video_filter_set_format (GstOMXVideoFilter * self, GstCaps * incaps,
     port_def.nBufferAlignment = 0;
     port_def.bBuffersContiguous = 0;
     port_def.nBufferCountActual = self->output_buffers;
+
     /* scalar buffer pitch should be multiple of 16 */
-    port_def.format.video.nStride =
-        ((port_def.format.video.nFrameWidth + 15) & 0xfffffff0) * 2;
+    switch (port_def.format.video.eColorFormat) {
+      case OMX_COLOR_FormatYUV420SemiPlanar:
+        port_def.format.video.nStride =
+            ((port_def.format.video.nFrameWidth + 15) & 0xfffffff0);
+        port_def.nBufferSize =
+            port_def.format.video.nStride * port_def.format.video.nFrameHeight *
+            3 / 2;
+        break;
+      case OMX_COLOR_FormatYCbYCr:
+        port_def.format.video.nStride =
+            ((port_def.format.video.nFrameWidth + 15) & 0xfffffff0) * 2;
+        port_def.nBufferSize =
+            port_def.format.video.nStride * port_def.format.video.nFrameHeight;
+        break;
+      default:
+        GST_ERROR_OBJECT (self,
+            "Component supports unsupported color format %d",
+            port_def.format.video.eColorFormat);
+        break;
+    }
 
     GST_DEBUG_OBJECT (self, "Updating outport port definition");
     if (gst_omx_port_update_port_definition (outport->data,
@@ -1257,6 +1276,15 @@ gst_omx_video_filter_set_format (GstOMXVideoFilter * self, GstCaps * incaps,
         port_def.nBufferCountActual);
     if (!gst_buffer_pool_set_config (outpool->data, config))
       goto config_pool_failed;
+
+    GST_WARNING_OBJECT (self,
+        "Port defs: nFrameWidth: %d, nFrameHeight: %d, CompressionFormat: %d, ColorFormat: %d, BufferAlignment: %d, BufferContiguous: %d, BufferCountActual: %d, VideoStride: %d, Buffersize: %d",
+        port_def.format.video.nFrameWidth,
+        port_def.format.video.nFrameHeight,
+        port_def.format.video.eCompressionFormat,
+        port_def.format.video.eColorFormat, port_def.nBufferAlignment,
+        port_def.bBuffersContiguous, port_def.nBufferCountActual,
+        port_def.format.video.nStride, port_def.nBufferSize);
 
     srcinfo = srcinfo->next;
     srccaps = srccaps->next;
@@ -1491,6 +1519,7 @@ error_cleanup:
 static gboolean
 gst_omx_video_filter_set_caps (GstOMXVideoFilter * self, GstCaps * incaps)
 {
+  GstOMXVideoFilterClass *klass = GST_OMX_VIDEO_FILTER_GET_CLASS (self);
   GstOMXVideoFilterPrivate *priv = self->priv;
   GstVideoInfo *ininfo = NULL, *outinfo;
   GstCaps *outcaps = NULL;
@@ -1514,7 +1543,15 @@ gst_omx_video_filter_set_caps (GstOMXVideoFilter * self, GstCaps * incaps)
     /* clear any pending reconfigure flag */
     gst_pad_check_reconfigure (otherpad);
 
-    outcaps = gst_omx_video_filter_find_transform (self, incaps, otherpad);
+    /* check if there are fixed source caps, otherwise find a transform */
+    if (klass->fixed_src_caps)
+      outcaps = klass->fixed_src_caps (self, incaps, otherpad);
+    else
+      outcaps = gst_omx_video_filter_find_transform (self, incaps, otherpad);
+
+    GST_DEBUG_OBJECT (self, "have new outcaps %" GST_PTR_FORMAT " %s",
+        outcaps, caps_str = gst_caps_to_string (outcaps));
+
     if (!outcaps || gst_caps_is_empty (outcaps))
       goto no_transform_possible;
 
@@ -1538,8 +1575,7 @@ gst_omx_video_filter_set_caps (GstOMXVideoFilter * self, GstCaps * incaps)
     goto parse_fail;
 
   GST_OMX_VIDEO_FILTER_STREAM_LOCK (self);
-  //~ samecaps = gst_video_info_is_equal (ininfo, &(priv->input_info));
-  samecaps = FALSE;
+
   if (!samecaps) {
     /* and subclass should be ready to configure format at any time around */
     ret =
@@ -2145,6 +2181,7 @@ gst_omx_video_filter_use_buffers (GstOMXVideoFilter * self,
 {
   GstOMXPort *mem_port;
   OMX_PARAM_PORTDEFINITIONTYPE port_def;
+  GstOMXBuffer *buf;
   GList *buffers = NULL;
   gint i, n;
   gboolean ret;
@@ -2155,7 +2192,8 @@ gst_omx_video_filter_use_buffers (GstOMXVideoFilter * self,
   /* Set actual buffer count to the port */
   gst_omx_port_get_port_definition (self->in_port, &port_def);
   port_def.nBufferCountActual = n;
-
+  buf = g_ptr_array_index (mem_port->buffers, 0);
+  port_def.nBufferSize = buf->omx_buf->nAllocLen;
   GST_DEBUG_OBJECT (self, "Updating input port buffer count to %lu",
       port_def.nBufferCountActual);
   if (gst_omx_port_update_port_definition (self->in_port,
@@ -2165,7 +2203,7 @@ gst_omx_video_filter_use_buffers (GstOMXVideoFilter * self,
   GST_DEBUG_OBJECT (self, "Configuring to use upstream buffers ...");
 
   for (i = 0; i < n; i++) {
-    GstOMXBuffer *buf = g_ptr_array_index (mem_port->buffers, i);
+    buf = g_ptr_array_index (mem_port->buffers, i);
     buffers = g_list_append (buffers, buf->omx_buf->pBuffer);
     GST_LOG_OBJECT (self, "Adding buffer %p to the use list",
         buf->omx_buf->pBuffer);
@@ -2190,6 +2228,7 @@ static GstFlowReturn
 gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
     GstVideoCodecFrame * frame)
 {
+  GstOMXVideoFilterClass *klass = GST_OMX_VIDEO_FILTER_GET_CLASS (self);
   GstOMXVideoFilterPrivate *priv = self->priv;
 
   GstOMXPort *port;
@@ -2206,6 +2245,36 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
   }
 
   if (!priv->started) {
+    OMX_PARAM_PORTDEFINITIONTYPE port_def;
+    GstVideoFrame vframe;
+    guint stride;
+
+    if (!gst_video_frame_map (&vframe, &priv->input_info, frame->input_buffer,
+            GST_MAP_READ))
+      goto invalid_frame;
+
+    stride = GST_VIDEO_FRAME_COMP_STRIDE (&vframe, 0);
+    gst_omx_port_get_port_definition (self->in_port, &port_def);
+
+    if (port_def.format.video.nStride != stride) {
+      guint n;
+
+      for (n = 0; n < GST_VIDEO_INFO_N_COMPONENTS (&priv->input_info); n++)
+        priv->input_info.stride[n] = GST_VIDEO_FRAME_COMP_STRIDE (&vframe, 0);
+
+      port_def.format.video.nStride = stride;
+      GST_INFO_OBJECT (self, "Updating input port stride to %lu",
+          GST_VIDEO_INFO_PLANE_STRIDE (&priv->input_info, 0));
+
+      if (gst_omx_port_update_port_definition (self->in_port,
+              &port_def) != OMX_ErrorNone)
+        goto reconfigure_error;
+
+      if (!klass->set_format (self, NULL, &priv->input_info, NULL,
+              priv->output_info))
+        goto reconfigure_error;
+    }
+
     /* If this buffer has been allocated using the openmax memory management
      * we share the buffers in the pool instead of copy them */
     if (!priv->sharing && gst_buffer_n_memory (frame->input_buffer) == 1
@@ -2232,6 +2301,12 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
      * _loop() can't call _finish_frame() and we might block forever
      * because no input buffers are released */
     GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+
+    if (priv->sharing) {
+      omxmem = (GstOMXMemory *) gst_buffer_peek_memory (frame->input_buffer, 0);
+      buf = omxmem->buf;
+    }
+
     acq_ret = gst_omx_port_acquire_buffer (port, &buf);
 
     if (acq_ret == GST_OMX_ACQUIRE_BUFFER_ERROR) {
@@ -2265,12 +2340,15 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
             "OMX input buffer %p and self buffer %p doesn't match",
             omxmem->buf->omx_buf->pBuffer, buf->omx_buf->pBuffer);
       }
-    }
-    /* Copy the buffer content in chunks of size as requested
-     * by the port */
-    if (!gst_omx_video_filter_fill_buffer (self, frame->input_buffer, buf)) {
-      gst_omx_port_release_buffer (port, buf);
-      goto buffer_fill_error;
+      buf->omx_buf->nFilledLen = omxmem->buf->omx_buf->nFilledLen;
+      buf->omx_buf->nOffset = omxmem->buf->omx_buf->nOffset;
+    } else {
+      /* Copy the buffer content in chunks of size as requested
+       * by the port */
+      if (!gst_omx_video_filter_fill_buffer (self, frame->input_buffer, buf)) {
+        gst_omx_port_release_buffer (port, buf);
+        goto buffer_fill_error;
+      }
     }
 
     id = g_slice_new0 (BufferIdentification);
@@ -2290,6 +2368,18 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
 
   return priv->downstream_flow_ret;
 
+invalid_frame:
+  {
+    GST_WARNING_OBJECT (self, "invalid frame received");
+    return gst_video_encoder_finish_frame (GST_VIDEO_ENCODER (self), frame);
+  }
+reconfigure_error:
+  {
+    GST_ELEMENT_ERROR (self, LIBRARY, SETTINGS, (NULL),
+        ("Unable to reconfigure input port"));
+
+    return gst_video_encoder_finish_frame (GST_VIDEO_ENCODER (self), frame);
+  }
 init_error:
   {
     GST_ELEMENT_ERROR (self, LIBRARY, SETTINGS, (NULL),
