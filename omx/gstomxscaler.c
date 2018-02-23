@@ -358,56 +358,19 @@ static GstCaps *
 gst_omx_scaler_fixed_src_caps (GstOMXVideoFilter * self,
     GstCaps * incaps, GstPad * srcpad)
 {
-  GstCaps *intersection;
   GstCaps *srctempl;
-  GstCaps *srccaps;
   GstPad *srcpeer;
   GstCaps *peercaps;
-  gboolean is_fixed;
-  gchar *caps_str = NULL;
 
   srctempl = gst_pad_get_pad_template_caps (srcpad);
-
-  /* first lets see what the peer has to offer */
   srcpeer = gst_pad_get_peer (srcpad);
   peercaps = gst_pad_query_caps (srcpeer, srctempl);
-
-  intersection =
-      gst_caps_intersect_full (srctempl, peercaps, GST_CAPS_INTERSECT_FIRST);
-  gst_caps_unref (peercaps);
-
-  srccaps = gst_caps_is_empty (intersection) ? gst_caps_ref (srctempl) :
-      gst_caps_ref (intersection);
-  gst_caps_unref (intersection);
-  gst_caps_unref (srctempl);
-
-  GST_DEBUG_OBJECT (self, "intersect with peercaps (%" GST_PTR_FORMAT "): %s",
-      srccaps, caps_str = gst_caps_to_string (srccaps));
-  if (caps_str)
-    g_free (caps_str);
-
-  /* now lets intersect with incoming caps */
-  intersection =
-      gst_caps_intersect_full (srccaps, incaps, GST_CAPS_INTERSECT_FIRST);
-  srccaps =
-      gst_caps_is_empty (intersection) ? gst_caps_ref (srccaps) :
-      gst_caps_ref (intersection);
-  gst_caps_unref (intersection);
-
-  GST_DEBUG_OBJECT (self, "intersect with incaps (%" GST_PTR_FORMAT "): %s",
-      srccaps, caps_str = gst_caps_to_string (srccaps));
-  if (caps_str)
-    g_free (caps_str);
-
-  srccaps = gst_caps_fixate (srccaps);
 
   if (srcpeer)
     gst_object_unref (srcpeer);
 
-  GST_DEBUG_OBJECT (self, "fixated to (%" GST_PTR_FORMAT "): %s", srccaps,
-      caps_str = gst_caps_to_string (srccaps));
-  if (caps_str)
-    g_free (caps_str);
+  if (srctempl)
+    gst_caps_unref (srctempl);
 
-  return srccaps;
+  return gst_caps_fixate(peercaps);
 }
