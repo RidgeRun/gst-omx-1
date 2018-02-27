@@ -1277,7 +1277,7 @@ gst_omx_video_filter_set_format (GstOMXVideoFilter * self, GstCaps * incaps,
     if (!gst_buffer_pool_set_config (outpool->data, config))
       goto config_pool_failed;
 
-    GST_WARNING_OBJECT (self,
+    GST_LOG_OBJECT (self,
         "Port defs: nFrameWidth: %d, nFrameHeight: %d, CompressionFormat: %d, ColorFormat: %d, BufferAlignment: %d, BufferContiguous: %d, BufferCountActual: %d, VideoStride: %d, Buffersize: %d",
         port_def.format.video.nFrameWidth,
         port_def.format.video.nFrameHeight,
@@ -2274,6 +2274,8 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
               priv->output_info))
         goto reconfigure_error;
     }
+
+    gst_video_frame_unmap (&vframe);
 
     /* If this buffer has been allocated using the openmax memory management
      * we share the buffers in the pool instead of copy them */
