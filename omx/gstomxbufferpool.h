@@ -28,6 +28,7 @@
 #include <gst/gst.h>
 #include <gst/video/gstvideometa.h>
 #include <gst/video/gstvideopool.h>
+#include <gst/gstatomicqueue.h>
 
 #include "gstomx.h"
 
@@ -40,8 +41,22 @@ G_BEGIN_DECLS
 #define GST_IS_OMX_BUFFER_POOL(obj) \
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_BUFFER_POOL))
 
+typedef struct _GstOMXMemory GstOMXMemory;
 typedef struct _GstOMXBufferPool GstOMXBufferPool;
 typedef struct _GstOMXBufferPoolClass GstOMXBufferPoolClass;
+
+/**
+ * GstOmxMemory:
+ * @mem: a lightweight refcounted object that wraps a region of memory
+ * @buf: a reference to the OMX buffer
+ *
+ * Subclass of #GstMemory containing additional information about OMX.
+ */
+struct _GstOMXMemory
+{
+  GstMemory mem;
+  GstOMXBuffer *buf;
+};
 
 struct _GstOMXBufferPool
 {
@@ -72,12 +87,19 @@ struct _GstOMXBufferPool
   GstBufferPool *other_pool;
   GPtrArray *buffers;
 
+  /* Buffer queue */
+  GstAtomicQueue *queue;
+
   /* Used during acquire for output ports to
    * specify which buffer has to be retrieved
    * and during alloc, which buffer has to be
    * wrapped
    */
   gint current_buffer_index;
+
+  /* Acquire buffer helpers */
+  GCond acquired_cond;
+  GMutex acquired_mutex;
 };
 
 struct _GstOMXBufferPoolClass

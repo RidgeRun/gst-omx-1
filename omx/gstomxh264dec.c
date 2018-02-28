@@ -107,7 +107,6 @@ gst_omx_h264_dec_is_format_change (GstOMXVideoDec * dec,
       || g_strcmp0 (old_level, new_level) != 0) {
     return TRUE;
   }
-
   return FALSE;
 }
 
@@ -115,12 +114,118 @@ static gboolean
 gst_omx_h264_dec_set_format (GstOMXVideoDec * dec, GstOMXPort * port,
     GstVideoCodecState * state)
 {
-  gboolean ret;
+  GstOMXH264Dec *self = GST_OMX_H264_DEC (dec);
+  GstCaps *peercaps;
   OMX_PARAM_PORTDEFINITIONTYPE port_def;
+  OMX_VIDEO_PARAM_PROFILELEVELTYPE param;
+  OMX_ERRORTYPE err;
+  gboolean ret;
+  const gchar *profile_string, *level_string;
 
   gst_omx_port_get_port_definition (port, &port_def);
   port_def.format.video.eCompressionFormat = OMX_VIDEO_CodingAVC;
   ret = gst_omx_port_update_port_definition (port, &port_def) == OMX_ErrorNone;
 
+  GST_OMX_INIT_STRUCT (&param);
+  param.nPortIndex = GST_OMX_VIDEO_DEC (self)->dec_in_port->index;
+
+  err =
+      gst_omx_component_get_parameter (GST_OMX_VIDEO_DEC (self)->dec,
+      OMX_IndexParamVideoProfileLevelCurrent, &param);
+  if (err != OMX_ErrorNone) {
+    GST_WARNING_OBJECT (self,
+        "Getting profile/level not supported by component");
+    return TRUE;
+  }
+
+  peercaps = gst_pad_peer_query_caps (GST_VIDEO_DECODER_SINK_PAD (dec),
+      gst_pad_get_pad_template_caps (GST_VIDEO_DECODER_SINK_PAD (dec)));
+  if (peercaps) {
+    GstStructure *s;
+
+    if (gst_caps_is_empty (peercaps)) {
+      gst_caps_unref (peercaps);
+      GST_ERROR_OBJECT (self, "Empty caps");
+      return FALSE;
+    }
+
+    s = gst_caps_get_structure (peercaps, 0);
+    profile_string = gst_structure_get_string (s, "profile");
+    if (profile_string) {
+      if (g_str_equal (profile_string, "baseline")) {
+        param.eProfile = OMX_VIDEO_AVCProfileBaseline;
+      } else if (g_str_equal (profile_string, "main")) {
+        param.eProfile = OMX_VIDEO_AVCProfileMain;
+      } else if (g_str_equal (profile_string, "high")) {
+        param.eProfile = OMX_VIDEO_AVCProfileHigh;
+      } else {
+        goto unsupported_profile;
+      }
+    }
+    level_string = gst_structure_get_string (s, "level");
+    if (level_string) {
+      if (g_str_equal (level_string, "1")) {
+        param.eLevel = OMX_VIDEO_AVCLevel1;
+      } else if (g_str_equal (level_string, "1b")) {
+        param.eLevel = OMX_VIDEO_AVCLevel1b;
+      } else if (g_str_equal (level_string, "1.1")) {
+        param.eLevel = OMX_VIDEO_AVCLevel11;
+      } else if (g_str_equal (level_string, "1.2")) {
+        param.eLevel = OMX_VIDEO_AVCLevel12;
+      } else if (g_str_equal (level_string, "1.3")) {
+        param.eLevel = OMX_VIDEO_AVCLevel13;
+      } else if (g_str_equal (level_string, "2")) {
+        param.eLevel = OMX_VIDEO_AVCLevel2;
+      } else if (g_str_equal (level_string, "2.1")) {
+        param.eLevel = OMX_VIDEO_AVCLevel21;
+      } else if (g_str_equal (level_string, "2.2")) {
+        param.eLevel = OMX_VIDEO_AVCLevel22;
+      } else if (g_str_equal (level_string, "3")) {
+        param.eLevel = OMX_VIDEO_AVCLevel3;
+      } else if (g_str_equal (level_string, "3.1")) {
+        param.eLevel = OMX_VIDEO_AVCLevel31;
+      } else if (g_str_equal (level_string, "3.2")) {
+        param.eLevel = OMX_VIDEO_AVCLevel32;
+      } else if (g_str_equal (level_string, "4")) {
+        param.eLevel = OMX_VIDEO_AVCLevel4;
+      } else if (g_str_equal (level_string, "4.1")) {
+        param.eLevel = OMX_VIDEO_AVCLevel41;
+      } else if (g_str_equal (level_string, "4.2")) {
+        param.eLevel = OMX_VIDEO_AVCLevel42;
+      } else if (g_str_equal (level_string, "5")) {
+        param.eLevel = OMX_VIDEO_AVCLevel5;
+      } else if (g_str_equal (level_string, "5.1")) {
+        param.eLevel = OMX_VIDEO_AVCLevel51;
+      } else {
+        goto unsupported_level;
+      }
+    }
+    gst_caps_unref (peercaps);
+  }
+
+  err =
+      gst_omx_component_set_parameter (GST_OMX_VIDEO_DEC (self)->dec,
+      OMX_IndexParamVideoProfileLevelCurrent, &param);
+  if (err == OMX_ErrorUnsupportedIndex) {
+    GST_WARNING_OBJECT (self,
+        "Setting profile/level not supported by component");
+  } else if (err != OMX_ErrorNone) {
+    GST_ERROR_OBJECT (self,
+        "Error setting profile %u and level %u: %s (0x%08x)",
+        (guint) param.eProfile, (guint) param.eLevel,
+        gst_omx_error_to_string (err), err);
+    return FALSE;
+  }
+
   return ret;
+
+unsupported_profile:
+  GST_ERROR_OBJECT (self, "Unsupported profile %s", profile_string);
+  gst_caps_unref (peercaps);
+  return FALSE;
+
+unsupported_level:
+  GST_ERROR_OBJECT (self, "Unsupported level %s", level_string);
+  gst_caps_unref (peercaps);
+  return FALSE;
 }
