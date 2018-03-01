@@ -170,7 +170,6 @@ gst_omx_tvp_set_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
-  return;
 }
 
 static void
@@ -193,7 +192,6 @@ gst_omx_tvp_get_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
-  return;
 }
 
 /* GstBaseTransform vmethod implementations */

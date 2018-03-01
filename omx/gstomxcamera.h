@@ -90,7 +90,6 @@ struct _GstOMXCamera
 struct _GstOMXCameraClass
 {
   GstPushSrcClass parent_class;
-
   GstOMXClassData cdata;
 };
 

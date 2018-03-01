@@ -51,6 +51,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_omx_video_filter_debug_category);
     (G_TYPE_INSTANCE_GET_PRIVATE ((obj), GST_TYPE_OMX_VIDEO_FILTER, \
         GstOMXVideoFilterPrivate))
 
+#define GST_OMX_VIDEO_STRIDE_ALIGN 0xfffffff0
+#define GST_OMX_VIDEO_WIDTH_PAD    15
+
 struct _GstOMXVideoFilterPrivate
 {
   /* Video format */
@@ -769,7 +772,6 @@ gst_omx_video_filter_drain (GstOMXVideoFilter * self)
   return TRUE;
 }
 
-
 static GstCaps *
 gst_omx_video_filter_default_transform_caps (GstOMXVideoFilter * self,
     GstPadDirection direction, GstPad * srcpad, GstCaps * caps,
@@ -811,7 +813,6 @@ gst_omx_video_filter_default_fixate_caps (GstOMXVideoFilter * self,
 
   return caps;
 }
-
 
 /* given @caps on the src or sink pad (given by @direction)
  * calculate the possible caps on the other pad. When the
@@ -862,7 +863,6 @@ gst_omx_video_filter_transform_caps (GstOMXVideoFilter * self,
 
   return ret;
 }
-
 
 /* get the caps that can be handled by sinkpad. We perform:
  *
@@ -1246,14 +1246,16 @@ gst_omx_video_filter_set_format (GstOMXVideoFilter * self, GstCaps * incaps,
     switch (port_def.format.video.eColorFormat) {
       case OMX_COLOR_FormatYUV420SemiPlanar:
         port_def.format.video.nStride =
-            ((port_def.format.video.nFrameWidth + 15) & 0xfffffff0);
+            ((port_def.format.video.nFrameWidth + GST_OMX_VIDEO_WIDTH_PAD)
+            & GST_OMX_VIDEO_STRIDE_ALIGN);
         port_def.nBufferSize =
             port_def.format.video.nStride * port_def.format.video.nFrameHeight *
             3 / 2;
         break;
       case OMX_COLOR_FormatYCbYCr:
         port_def.format.video.nStride =
-            ((port_def.format.video.nFrameWidth + 15) & 0xfffffff0) * 2;
+            ((port_def.format.video.nFrameWidth + GST_OMX_VIDEO_WIDTH_PAD)
+            & GST_OMX_VIDEO_STRIDE_ALIGN) * 2;
         port_def.nBufferSize =
             port_def.format.video.nStride * port_def.format.video.nFrameHeight;
         break;
@@ -1943,7 +1945,8 @@ gst_omx_video_filter_fill_buffer (GstOMXVideoFilter * self, GstBuffer * inbuf,
   /* Same strides and everything
    * Subtract 512 bytes padding used by the TI VIDENC component  */
   if (gst_buffer_get_size (inbuf) ==
-      outbuf->omx_buf->nAllocLen - outbuf->omx_buf->nOffset - 512) {
+      outbuf->omx_buf->nAllocLen - outbuf->omx_buf->nOffset
+      - GST_OMX_VIDEO_BUFFER_OFFSET) {
     outbuf->omx_buf->nFilledLen = gst_buffer_get_size (inbuf);
 
     if (!priv->sharing) {

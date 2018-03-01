@@ -129,7 +129,6 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
   video_decoder_class->handle_frame =
       GST_DEBUG_FUNCPTR (gst_omx_video_dec_handle_frame);
   video_decoder_class->finish = GST_DEBUG_FUNCPTR (gst_omx_video_dec_finish);
-  // TODO: Find if video_decoder_class->drain fxn pointer is needed for our case
   video_decoder_class->decide_allocation =
       GST_DEBUG_FUNCPTR (gst_omx_video_dec_decide_allocation);
 
@@ -1457,7 +1456,6 @@ gst_omx_video_dec_configure_output_port (GstOMXVideoDec * self)
   }
 
   gst_video_codec_state_unref (state);
-
   GST_VIDEO_DECODER_STREAM_UNLOCK (self);
 
   err = gst_omx_video_dec_allocate_output_buffers (self);
@@ -1530,7 +1528,6 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
     gst_omx_video_dec_drain (decoder, FALSE);
     gst_omx_video_dec_flush (decoder);
     gst_omx_port_set_flushing (out_port, 5 * GST_SECOND, TRUE);
-    // TODO: Check if set_flushing should be called before dec_flush
 
     if (klass->cdata.hacks & GST_OMX_HACK_NO_COMPONENT_RECONFIGURE) {
       GST_VIDEO_DECODER_STREAM_UNLOCK (self);

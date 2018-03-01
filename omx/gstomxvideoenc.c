@@ -1372,7 +1372,8 @@ gst_omx_video_enc_fill_buffer (GstOMXVideoEnc * self, GstBuffer * inbuf,
   /* Same strides and everything
    * Subtract 512 bytes padding used by the TI VIDENC component */
   if (gst_buffer_get_size (inbuf) ==
-      outbuf->omx_buf->nAllocLen - outbuf->omx_buf->nOffset - 512) {
+      outbuf->omx_buf->nAllocLen - outbuf->omx_buf->nOffset
+      - GST_OMX_VIDEO_BUFFER_OFFSET) {
     outbuf->omx_buf->nFilledLen = gst_buffer_get_size (inbuf);
 
     GST_LOG_OBJECT (self, "Matched strides - direct copy %u bytes",

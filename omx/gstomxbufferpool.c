@@ -43,6 +43,7 @@ struct _GstOMXMemoryAllocatorClass
 };
 
 #define GST_OMX_MEMORY_TYPE "openmax"
+#define GST_OMX_VIDEO_NV12_HEIGHT_PAD 72
 
 static GstMemory *
 gst_omx_memory_allocator_alloc_dummy (GstAllocator * allocator, gsize size,
@@ -420,7 +421,8 @@ gst_omx_buffer_pool_alloc_buffer (GstBufferPool * bpool,
       case GST_VIDEO_FORMAT_NV12:
         stride[1] = pool->port->port_def.format.video.nStride;
         offset[1] =
-            stride[0] * (pool->port->port_def.format.video.nFrameHeight + 72);
+            stride[0] * (pool->port->port_def.format.video.nFrameHeight
+            + GST_OMX_VIDEO_NV12_HEIGHT_PAD);
       case GST_VIDEO_FORMAT_NV16:
         stride[1] = nstride;
         offset[1] = offset[0] + stride[0] * nslice;

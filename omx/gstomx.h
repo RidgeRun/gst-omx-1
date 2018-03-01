@@ -139,6 +139,9 @@ G_BEGIN_DECLS
  */
 #define GST_OMX_HACK_HEIGHT_MULTIPLE_16             G_GUINT64_CONSTANT (0x0000000000000200)
 
+/* Helper defs for TI DM81xx */
+#define GST_OMX_VIDEO_BUFFER_OFFSET 512
+
 typedef struct _GstOMXCore GstOMXCore;
 typedef struct _GstOMXPort GstOMXPort;
 typedef enum _GstOMXPortDirection GstOMXPortDirection;
