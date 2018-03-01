@@ -52,8 +52,7 @@ static gboolean gst_omx_video_dec_start (GstVideoDecoder * decoder);
 static gboolean gst_omx_video_dec_stop (GstVideoDecoder * decoder);
 static gboolean gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
     GstVideoCodecState * state);
-static gboolean gst_omx_video_dec_reset (GstVideoDecoder * decoder,
-    gboolean hard);
+static gboolean gst_omx_video_dec_reset (GstVideoDecoder * decoder);
 static gboolean gst_omx_video_dec_flush (GstVideoDecoder * decoder);
 static GstFlowReturn gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
     GstVideoCodecFrame * frame);
@@ -1483,7 +1482,7 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (self, "Setting new caps %" GST_PTR_FORMAT, state->caps);
 
-  if (gst_omx_video_dec_reset (decoder, TRUE))
+  if (gst_omx_video_dec_reset (decoder))
     GST_DEBUG_OBJECT (self, "Decoder reset");
   else
     GST_ERROR_OBJECT (self, "Failed to reset decoder");
@@ -1699,13 +1698,10 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
 }
 
 static gboolean
-gst_omx_video_dec_reset (GstVideoDecoder * decoder, gboolean hard)
+gst_omx_video_dec_reset (GstVideoDecoder * decoder)
 {
   GstOMXVideoDec *self;
-
   self = GST_OMX_VIDEO_DEC (decoder);
-
-  /* FIXME: Handle different values of hard */
 
   GST_DEBUG_OBJECT (self, "Resetting decoder");
 
