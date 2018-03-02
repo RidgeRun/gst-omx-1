@@ -233,11 +233,6 @@ gst_omx_audio_enc_change_state (GstElement * element, GstStateChange transition)
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
-      if (self->enc_in_port)
-        gst_omx_port_set_flushing (self->enc_in_port, 5 * GST_SECOND, TRUE);
-      if (self->enc_out_port)
-        gst_omx_port_set_flushing (self->enc_out_port, 5 * GST_SECOND, TRUE);
-
       g_mutex_lock (&self->drain_lock);
       self->draining = FALSE;
       g_cond_broadcast (&self->drain_cond);
@@ -472,6 +467,9 @@ gst_omx_audio_enc_loop (GstOMXAudioEnc * self)
 
   self->downstream_flow_ret = flow_ret;
 
+  if (self->draining)
+    g_cond_broadcast (&self->drain_cond);
+
   if (flow_ret != GST_FLOW_OK)
     goto flow_error;
 
@@ -536,8 +534,6 @@ flow_error:
     if (flow_ret == GST_FLOW_EOS) {
       GST_DEBUG_OBJECT (self, "EOS");
 
-      gst_pad_push_event (GST_AUDIO_ENCODER_SRC_PAD (self),
-          gst_event_new_eos ());
       gst_pad_pause_task (GST_AUDIO_ENCODER_SRC_PAD (self));
       self->started = FALSE;
     } else if (flow_ret < GST_FLOW_EOS) {
@@ -617,13 +613,13 @@ gst_omx_audio_enc_stop (GstAudioEncoder * encoder)
 
   GST_DEBUG_OBJECT (self, "Stopping encoder");
 
-  gst_omx_port_set_flushing (self->enc_in_port, 5 * GST_SECOND, TRUE);
-  gst_omx_port_set_flushing (self->enc_out_port, 5 * GST_SECOND, TRUE);
-
   gst_pad_stop_task (GST_AUDIO_ENCODER_SRC_PAD (encoder));
 
   if (gst_omx_component_get_state (self->enc, 0) > OMX_StateIdle)
     gst_omx_component_set_state (self->enc, OMX_StateIdle);
+
+  gst_omx_port_set_flushing (self->enc_out_port, 5 * GST_SECOND, TRUE);
+  gst_omx_port_set_flushing (self->enc_in_port, 5 * GST_SECOND, TRUE);
 
   self->downstream_flow_ret = GST_FLOW_FLUSHING;
   self->started = FALSE;
@@ -644,8 +640,11 @@ gst_omx_audio_enc_set_format (GstAudioEncoder * encoder, GstAudioInfo * info)
   GstOMXAudioEnc *self;
   GstOMXAudioEncClass *klass;
   gboolean needs_disable = FALSE;
-  OMX_PARAM_PORTDEFINITIONTYPE port_def;
+  OMX_PARAM_PORTDEFINITIONTYPE port_def_in;
+  OMX_PARAM_PORTDEFINITIONTYPE port_def_out;
   OMX_AUDIO_PARAM_PCMMODETYPE pcm_param;
+  OMX_AUDIO_PARAM_AACPROFILETYPE aac_profile;
+  OMX_PORT_PARAM_TYPE param;
   gint i;
   OMX_ERRORTYPE err;
 
@@ -655,12 +654,30 @@ gst_omx_audio_enc_set_format (GstAudioEncoder * encoder, GstAudioInfo * info)
   GST_DEBUG_OBJECT (self, "Setting new caps");
 
   /* Set audio encoder base class properties */
-  gst_audio_encoder_set_frame_samples_min (encoder,
-      gst_util_uint64_scale_ceil (OMX_MIN_PCMPAYLOAD_MSEC,
-          GST_MSECOND * info->rate, GST_SECOND));
-  gst_audio_encoder_set_frame_samples_max (encoder, 0);
+  gst_audio_encoder_set_frame_samples_min (encoder, 1024);
+  gst_audio_encoder_set_frame_samples_max (encoder, 1024);
 
-  gst_omx_port_get_port_definition (self->enc_in_port, &port_def);
+  GST_OMX_INIT_STRUCT (&param);
+
+  param.nPorts = 2;
+  param.nStartPortNumber = 0;
+  err =
+      gst_omx_component_set_parameter (self->enc, OMX_IndexParamAudioInit,
+      &param);
+  if (err != OMX_ErrorNone) {
+    GST_ERROR_OBJECT (self, "Failed to set AudioInit parameters: %s (0x%08x)",
+        gst_omx_error_to_string (err), err);
+    return FALSE;
+  }
+
+  GST_OMX_INIT_STRUCT (&param);
+  gst_omx_component_get_parameter (self->enc, OMX_IndexParamAudioInit, &param);
+  GST_DEBUG_OBJECT (self, "param.nPorts=%d, param.nStartPortNumber=%d",
+      param.nPorts, param.nStartPortNumber);
+
+  GST_OMX_INIT_STRUCT (&port_def_in);
+  port_def_in.nPortIndex = 0;
+  gst_omx_port_get_port_definition (self->enc_in_port, &port_def_in);
 
   needs_disable =
       gst_omx_component_get_state (self->enc,
@@ -716,15 +733,31 @@ gst_omx_audio_enc_set_format (GstAudioEncoder * encoder, GstAudioInfo * info)
     GST_DEBUG_OBJECT (self, "Encoder drained and disabled");
   }
 
-  port_def.format.audio.eEncoding = OMX_AUDIO_CodingPCM;
+  port_def_in.nBufferSize = 4096;       /*  4096 Recommended buffer size */
+  port_def_in.nBufferCountActual = 1;
+  port_def_in.format.audio.eEncoding = OMX_AUDIO_CodingPCM;
   GST_DEBUG_OBJECT (self, "Setting inport port definition");
   if (gst_omx_port_update_port_definition (self->enc_in_port,
-          &port_def) != OMX_ErrorNone)
+          &port_def_in) != OMX_ErrorNone)
+    return FALSE;
+
+  GST_DEBUG_OBJECT (self, "Updating outport port definition");
+  GST_OMX_INIT_STRUCT (&port_def_out);
+  port_def_out.nPortIndex = 1;
+  gst_omx_port_get_port_definition (self->enc_out_port, &port_def_out);
+  port_def_out.nBufferSize = 4608;      /* 4608 Recommended buffer size */
+  port_def_out.nBufferCountActual = 1;
+  port_def_out.format.audio.eEncoding = OMX_AUDIO_CodingAAC;
+  if (gst_omx_port_update_port_definition (self->enc_out_port,
+          &port_def_out) != OMX_ErrorNone)
     return FALSE;
 
   GST_OMX_INIT_STRUCT (&pcm_param);
   pcm_param.nPortIndex = self->enc_in_port->index;
+  gst_omx_component_get_parameter (self->enc, OMX_IndexParamAudioPcm,
+      &pcm_param);
   pcm_param.nChannels = info->channels;
+  pcm_param.nSamplingRate = info->rate;
   pcm_param.eNumData =
       ((info->finfo->flags & GST_AUDIO_FORMAT_FLAG_SIGNED) ?
       OMX_NumericalDataSigned : OMX_NumericalDataUnsigned);
@@ -733,7 +766,6 @@ gst_omx_audio_enc_set_format (GstAudioEncoder * encoder, GstAudioInfo * info)
       OMX_EndianLittle : OMX_EndianBig);
   pcm_param.bInterleaved = OMX_TRUE;
   pcm_param.nBitPerSample = info->finfo->width;
-  pcm_param.nSamplingRate = info->rate;
   pcm_param.ePCMMode = OMX_AUDIO_PCMModeLinear;
 
   for (i = 0; i < pcm_param.nChannels; i++) {
@@ -785,8 +817,19 @@ gst_omx_audio_enc_set_format (GstAudioEncoder * encoder, GstAudioInfo * info)
     return FALSE;
   }
 
+  GST_OMX_INIT_STRUCT (&pcm_param);
+  pcm_param.nPortIndex = self->enc_in_port->index;
+  gst_omx_component_get_parameter (self->enc, OMX_IndexParamAudioPcm,
+      &pcm_param);
+  GST_DEBUG_OBJECT (self,
+      "pcm_param.nPortIndex=%d, pcm_param.nChannels=%d, pcm_param.nSamplingRate=%d, eNumData=%d got=%d, eEndian=%d got =%d, bInterleaved=%d, nBitPerSample=%d, ePCMMode=%d got=%d",
+      pcm_param.nPortIndex, pcm_param.nChannels, pcm_param.nSamplingRate,
+      OMX_NumericalDataUnsigned, pcm_param.eNumData, OMX_EndianLittle,
+      pcm_param.eEndian, pcm_param.bInterleaved, pcm_param.nBitPerSample,
+      OMX_AUDIO_PCMModeLinear, pcm_param.ePCMMode);
+
   if (klass->set_format) {
-    if (!klass->set_format (self, self->enc_in_port, info)) {
+    if (!klass->set_format (self, self->enc_out_port, info)) {
       GST_ERROR_OBJECT (self, "Subclass failed to set the new format");
       return FALSE;
     }
@@ -822,20 +865,44 @@ gst_omx_audio_enc_set_format (GstAudioEncoder * encoder, GstAudioInfo * info)
       return FALSE;
   } else {
     if (!(klass->cdata.hacks & GST_OMX_HACK_NO_DISABLE_OUTPORT)) {
-      /* Disable output port */
-      if (gst_omx_port_set_enabled (self->enc_out_port, FALSE) != OMX_ErrorNone)
+      GST_DEBUG_OBJECT (self, "Enabling ports");
+
+      if (gst_omx_port_set_enabled (self->enc_in_port, TRUE) != OMX_ErrorNone)
+        return FALSE;
+
+      if (gst_omx_port_wait_enabled (self->enc_in_port,
+              1 * GST_SECOND) != OMX_ErrorNone)
+        return FALSE;
+
+      /* Enable output port */
+      if (gst_omx_port_set_enabled (self->enc_out_port, TRUE) != OMX_ErrorNone)
         return FALSE;
 
       if (gst_omx_port_wait_enabled (self->enc_out_port,
               1 * GST_SECOND) != OMX_ErrorNone)
         return FALSE;
 
+      gst_omx_port_get_port_definition (self->enc_in_port, &port_def_in);
+      GST_DEBUG_OBJECT (self,
+          "port_def_in.nBufferCountActual=%d, port_def_in.format.audio.eEncoding=%d got=%d,port_def_in.nPortIndex=%d, port_def_in.nBufferSize=%d",
+          port_def_in.nBufferCountActual, OMX_AUDIO_CodingPCM,
+          port_def_in.format.audio.eEncoding, port_def_in.nPortIndex,
+          port_def_in.nBufferSize);
+      gst_omx_port_get_port_definition (self->enc_out_port, &port_def_out);
+      GST_DEBUG_OBJECT (self,
+          "port_def_out.nBufferCountActual=%d, port_def_out.format.audio.eEncoding=%d got=%d,port_def_out.nPortIndex=%d",
+          port_def_out.nBufferCountActual, OMX_AUDIO_CodingAAC,
+          port_def_out.format.audio.eEncoding, port_def_out.nPortIndex);
+      GST_DEBUG_OBJECT (self, "Setting Idle state");
       if (gst_omx_component_set_state (self->enc,
               OMX_StateIdle) != OMX_ErrorNone)
         return FALSE;
 
+      GST_DEBUG_OBJECT (self, "Allocating buffers");
       /* Need to allocate buffers to reach Idle state */
       if (gst_omx_port_allocate_buffers (self->enc_in_port) != OMX_ErrorNone)
+        return FALSE;
+      if (gst_omx_port_allocate_buffers (self->enc_out_port) != OMX_ErrorNone)
         return FALSE;
     } else {
       if (gst_omx_component_set_state (self->enc,
@@ -918,7 +985,7 @@ gst_omx_audio_enc_handle_frame (GstAudioEncoder * encoder, GstBuffer * inbuf)
   GstOMXAcquireBufferReturn acq_ret = GST_OMX_ACQUIRE_BUFFER_ERROR;
   GstOMXAudioEnc *self;
   GstOMXPort *port;
-  GstOMXBuffer *buf;
+  GstOMXBuffer *buf = NULL;
   gsize size;
   guint offset = 0;
   GstClockTime timestamp, duration, timestamp_offset = 0;

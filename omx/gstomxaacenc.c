@@ -312,6 +312,24 @@ gst_omx_aac_enc_set_format (GstOMXAudioEnc * enc, GstOMXPort * port,
     return FALSE;
   }
 
+  GST_OMX_INIT_STRUCT (&aac_profile);
+  aac_profile.nPortIndex = enc->enc_out_port->index;
+
+  err =
+      gst_omx_component_get_parameter (enc->enc, OMX_IndexParamAudioAac,
+      &aac_profile);
+  if (err != OMX_ErrorNone) {
+    GST_ERROR_OBJECT (self,
+        "Failed to get AAC parameters from component: %s (0x%08x)",
+        gst_omx_error_to_string (err), err);
+    return FALSE;
+  } else {
+    GST_DEBUG_OBJECT (self,
+        "eAACProfile=%d got=%d, eAACStreamFormat=%d, got=%d, nSampleRate=%d, nChannels=%d, nBitRate=%d",
+        OMX_AUDIO_AACObjectLC, aac_profile.eAACProfile,
+        OMX_AUDIO_AACStreamFormatMP4ADTS, aac_profile.eAACStreamFormat,
+        aac_profile.nSampleRate, aac_profile.nChannels, aac_profile.nBitRate);
+  }
   return TRUE;
 }
 
