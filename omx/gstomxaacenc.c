@@ -53,6 +53,7 @@ enum
 #define DEFAULT_AAC_TOOLS (OMX_AUDIO_AACToolMS | OMX_AUDIO_AACToolIS | OMX_AUDIO_AACToolTNS | OMX_AUDIO_AACToolPNS | OMX_AUDIO_AACToolLTP)
 #define DEFAULT_AAC_ER_TOOLS (OMX_AUDIO_AACERNone)
 
+#define INPUT_BUFFER_NUM_SAMPLES 1024
 #define GST_TYPE_OMX_AAC_TOOLS (gst_omx_aac_tools_get_type ())
 static GType
 gst_omx_aac_tools_get_type (void)
@@ -325,9 +326,9 @@ gst_omx_aac_enc_set_format (GstOMXAudioEnc * enc, GstOMXPort * port,
     return FALSE;
   } else {
     GST_DEBUG_OBJECT (self,
-        "eAACProfile=%d got=%d, eAACStreamFormat=%d, got=%d, nSampleRate=%d, nChannels=%d, nBitRate=%d",
-        OMX_AUDIO_AACObjectLC, aac_profile.eAACProfile,
-        OMX_AUDIO_AACStreamFormatMP4ADTS, aac_profile.eAACStreamFormat,
+        "Audio AAC parameters: eAACProfile=%d (OMX_AUDIO_AACObjectLC=%d), eAACStreamFormat=%d (OMX_AUDIO_AACStreamFormatMP4ADTS=%d), nSampleRate=%d, nChannels=%d, nBitRate=%d",
+        aac_profile.eAACProfile, OMX_AUDIO_AACObjectLC,
+        aac_profile.eAACStreamFormat, OMX_AUDIO_AACStreamFormatMP4ADTS,
         aac_profile.nSampleRate, aac_profile.nChannels, aac_profile.nBitRate);
   }
   return TRUE;
@@ -524,6 +525,7 @@ static guint
 gst_omx_aac_enc_get_num_samples (GstOMXAudioEnc * enc, GstOMXPort * port,
     GstAudioInfo * info, GstOMXBuffer * buf)
 {
-  /* FIXME: Depends on the profile at least */
-  return 1024;
+  /* For TI AAC Encoder implementation on the C674x platform, the input buffer
+     size (in words) is 1024 samples per channel. */
+  return INPUT_BUFFER_NUM_SAMPLES;
 }
