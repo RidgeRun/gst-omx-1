@@ -96,12 +96,6 @@ gst_omx_scaler_class_init (GstOMXScalerClass * klass)
 }
 
 static void
-gst_omx_scaler_init (GstOMXScaler * self)
-{
-
-}
-
-static void
 gst_omx_scaler_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
@@ -160,8 +154,8 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
   channel_resolution.eDir = OMX_DirInput;
   channel_resolution.nChId = 0;
 
-  GST_DEBUG_OBJECT (videofilter, "Setting input channel resolution with
-      Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
+  GST_DEBUG_OBJECT (videofilter,
+      "Setting input channel resolution with Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
       channel_resolution.Frm0Width, channel_resolution.Frm0Height,
       channel_resolution.Frm0Pitch, channel_resolution.FrmCropWidth,
       channel_resolution.FrmCropHeight);
@@ -192,8 +186,8 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
   channel_resolution.eDir = OMX_DirOutput;
   channel_resolution.nChId = 0;
 
-  GST_DEBUG_OBJECT (videofilter, "Setting output channel resolution with
-      Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
+  GST_DEBUG_OBJECT (videofilter,
+      "Setting output channel resolution with Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
       channel_resolution.Frm0Width, channel_resolution.Frm0Height,
       channel_resolution.Frm0Pitch, channel_resolution.FrmCropWidth,
       channel_resolution.FrmCropHeight);
@@ -372,5 +366,5 @@ gst_omx_scaler_fixed_src_caps (GstOMXVideoFilter * self,
   if (srctempl)
     gst_caps_unref (srctempl);
 
-  return gst_caps_fixate(peercaps);
+  return gst_caps_fixate (peercaps);
 }

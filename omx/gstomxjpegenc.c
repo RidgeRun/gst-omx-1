@@ -144,7 +144,6 @@ gst_omx_jpeg_enc_set_format (GstOMXVideoEnc * enc, GstOMXPort * port,
   return TRUE;
 }
 
-
 static GstCaps *
 gst_omx_jpeg_enc_get_caps (GstOMXVideoEnc * enc, GstOMXPort * port,
     GstVideoCodecState * state)

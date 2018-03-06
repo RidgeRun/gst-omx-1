@@ -1389,6 +1389,8 @@ retry:
 
   GST_DEBUG_OBJECT (comp->parent, "%s port %u has pending buffers",
       comp->name, port->index);
+  /* If *buf is not NULL, the pending buffer containing the given omx pointer
+   * is going to be provided */
   if (*buf) {
     GList *l;
     l = g_queue_find_custom (&port->pending_buffers, *buf,

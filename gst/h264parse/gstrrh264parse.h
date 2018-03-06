@@ -24,7 +24,6 @@
 #include <gst/base/gstbasetransform.h>
 
 G_BEGIN_DECLS
-/* #defines don't like whitespacey bits */
 #define GST_TYPE_RR_H264_PARSE \
   (gst_rr_h264_parse_get_type())
 #define GST_RR_H264_PARSE(obj) \

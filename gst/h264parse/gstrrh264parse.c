@@ -284,7 +284,7 @@ gst_rr_h264_parse_fetch_header (guint8 * data, gint buffer_size,
   for (i = 0; i < (buffer_size - NAL_LENGTH); i++) {
     state = ((state << 8) | data[i]);
 
-    /* In bytestream format each NAL si preceded by 
+    /* In bytestream format each NAL is preceded by
      * a four byte start code: 0x00 0x00 0x00 0x01.
      * The byte after this code indicates the NAL type,
      * we're looking for the SPS(0x07) and PPS(0x08) NAL*/
@@ -408,7 +408,7 @@ gst_rr_h264_parse_get_codec_data (GstRrH264Parse * self, GstBuffer * buf,
   return TRUE;
 }
 
-/* Function for convert the content of the buffer from bytestream to packetized convertion */
+/* Function to convert the content of the buffer from bytestream to packetized convertion */
 static gboolean
 gst_rr_h264_parse_set_codec_data (GstRrH264Parse * self, GstBuffer * buf)
 {
@@ -578,7 +578,7 @@ gst_rr_h264_parse_stop (GstBaseTransform * btrans)
 static gboolean
 rr_h264_parse_init (GstPlugin * self)
 {
-  /* debug category for fltering log messages
+  /* debug category for filtering log messages
    */
   GST_DEBUG_CATEGORY_INIT (gst_rr_h264_parse_debug, "rrh264parse",
       0, "RR H.264 parse");
