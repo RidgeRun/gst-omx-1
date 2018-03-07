@@ -794,7 +794,6 @@ gst_omx_video_filter_default_fixate_caps (GstOMXVideoFilter * self,
       caps_str = gst_caps_to_string (caps));
   if (caps_str)
     g_free (caps_str);
-
   return caps;
 }
 

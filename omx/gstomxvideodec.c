@@ -52,7 +52,8 @@ static gboolean gst_omx_video_dec_start (GstVideoDecoder * decoder);
 static gboolean gst_omx_video_dec_stop (GstVideoDecoder * decoder);
 static gboolean gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
     GstVideoCodecState * state);
-static gboolean gst_omx_video_dec_reset (GstVideoDecoder * decoder);
+static gboolean gst_omx_video_dec_reset (GstVideoDecoder * decoder,
+    gboolean hard);
 static gboolean gst_omx_video_dec_flush (GstVideoDecoder * decoder);
 static GstFlowReturn gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
     GstVideoCodecFrame * frame);
@@ -106,13 +107,13 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_OUTPUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
-      "The amount of OMX output buffers",
-      1, 16, GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          "The amount of OMX output buffers",
+          1, 16, GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_INPUT_BUFFERS,
       g_param_spec_uint ("input-buffers", "Input buffers",
-      "The amount of OMX input buffers",
-      1, 16, GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          "The amount of OMX input buffers",
+          1, 16, GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 
   element_class->change_state =
       GST_DEBUG_FUNCPTR (gst_omx_video_dec_change_state);
@@ -409,7 +410,7 @@ gst_omx_video_dec_fill_buffer (GstOMXVideoDec * self,
     const guint nslice = port_def->format.video.nSliceHeight;
     guint src_stride[GST_VIDEO_MAX_PLANES] = { nstride, 0, };
     guint src_size[GST_VIDEO_MAX_PLANES] = { nstride * nslice, 0, };
-    gint dst_width[GST_VIDEO_MAX_PLANES] = { 0, 0};
+    gint dst_width[GST_VIDEO_MAX_PLANES] = { 0, 0 };
     gint dst_height[GST_VIDEO_MAX_PLANES] =
         { GST_VIDEO_INFO_HEIGHT (vinfo), 0, };
     const guint8 *src;
@@ -1030,7 +1031,6 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
   } else if (buf->omx_buf->nFilledLen > 0 || buf->eglimage) {
     if (self->out_port_pool) {
       gint i, n;
-      GstBuffer *outbuf;
       GstBufferPoolAcquireParams params = { 0, };
 
       n = port->buffers->len;
@@ -1482,7 +1482,7 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (self, "Setting new caps %" GST_PTR_FORMAT, state->caps);
 
-  if (gst_omx_video_dec_reset (decoder))
+  if (gst_omx_video_dec_reset (decoder, FALSE))
     GST_DEBUG_OBJECT (self, "Decoder reset");
   else
     GST_ERROR_OBJECT (self, "Failed to reset decoder");
@@ -1614,7 +1614,7 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (self, "Updating outport port definition");
   if (gst_omx_port_update_port_definition (self->dec_out_port,
-      &port_def) != OMX_ErrorNone)
+          &port_def) != OMX_ErrorNone)
     return FALSE;
 
   gst_buffer_replace (&self->codec_data, state->codec_data);
@@ -1698,7 +1698,7 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
 }
 
 static gboolean
-gst_omx_video_dec_reset (GstVideoDecoder * decoder)
+gst_omx_video_dec_reset (GstVideoDecoder * decoder, gboolean hard)
 {
   GstOMXVideoDec *self;
   self = GST_OMX_VIDEO_DEC (decoder);
