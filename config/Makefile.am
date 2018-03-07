@@ -1,1 +1,1 @@
-SUBDIRS = bellagio rpi ti
+SUBDIRS = bellagio rpi dm81xx
