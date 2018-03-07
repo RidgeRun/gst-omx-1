@@ -862,6 +862,7 @@ gst_omx_audio_dec_set_format (GstAudioDecoder * decoder, GstCaps * caps)
     GST_DEBUG_OBJECT (self, "Decoder drained and disabled");
   }
 
+  /* Call subclass set_format for input port configuration */
   if (klass->set_format) {
     if (!klass->set_format (self, self->dec_in_port, caps)) {
       GST_ERROR_OBJECT (self, "Subclass failed to set the new input format");
@@ -869,22 +870,16 @@ gst_omx_audio_dec_set_format (GstAudioDecoder * decoder, GstCaps * caps)
     }
   }
 
-  GST_DEBUG_OBJECT (self, "Updating outport port definition");
-  if (gst_omx_port_update_port_definition (self->dec_out_port,
-          NULL) != OMX_ErrorNone)
-    return FALSE;
-
-  /* Get codec data from caps */
-  gst_buffer_replace (&self->codec_data, NULL);
-  s = gst_caps_get_structure (caps, 0);
-  codec_data = gst_structure_get_value (s, "codec_data");
-  if (codec_data) {
-    /* Vorbis and some other codecs have multiple buffers in
-     * the stream-header field */
-    self->codec_data = gst_value_get_buffer (codec_data);
-    if (self->codec_data)
-      gst_buffer_ref (self->codec_data);
+  /* Call subclass set_format for output port configuration */
+  if (klass->set_format) {
+    if (!klass->set_format (self, self->dec_out_port, NULL)) {
+      GST_ERROR_OBJECT (self, "Subclass failed to set the new output format");
+      return FALSE;
+    }
   }
+
+  /* Disable codec data object usage */
+  gst_buffer_replace (&self->codec_data, NULL);
 
   GST_DEBUG_OBJECT (self, "Enabling component");
 
@@ -1046,7 +1041,7 @@ gst_omx_audio_dec_handle_frame (GstAudioDecoder * decoder, GstBuffer * inbuf)
   GstOMXAcquireBufferReturn acq_ret = GST_OMX_ACQUIRE_BUFFER_ERROR;
   GstOMXAudioDec *self;
   GstOMXPort *port;
-  GstOMXBuffer *buf;
+  GstOMXBuffer *buf = NULL;
   GstBuffer *codec_data = NULL;
   guint offset = 0;
   GstClockTime timestamp, duration;
