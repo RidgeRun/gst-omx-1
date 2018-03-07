@@ -395,7 +395,7 @@ tools/Makefile
 config/Makefile
 config/bellagio/Makefile
 config/rpi/Makefile
-config/ti/Makefile
+config/dm81xx/Makefile
 examples/Makefile
 examples/egl/Makefile
 m4/Makefile
