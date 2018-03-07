@@ -46,21 +46,17 @@ enum
   PROP_SCAN_TYPE,
 };
 
-static GstStaticPadTemplate sink_template =
-GST_STATIC_PAD_TEMPLATE (
-  "sink",
-  GST_PAD_SINK,
-  GST_PAD_ALWAYS,
-  GST_STATIC_CAPS ("ANY")
-);
+static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
+    GST_PAD_SINK,
+    GST_PAD_ALWAYS,
+    GST_STATIC_CAPS ("ANY")
+    );
 
-static GstStaticPadTemplate src_template =
-GST_STATIC_PAD_TEMPLATE (
-  "src",
-  GST_PAD_SRC,
-  GST_PAD_ALWAYS,
-  GST_STATIC_CAPS ("ANY")
-);
+static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
+    GST_PAD_SRC,
+    GST_PAD_ALWAYS,
+    GST_STATIC_CAPS ("ANY")
+    );
 
 #define gst_omxtvp_parent_class parent_class
 G_DEFINE_TYPE (GstOMXTvp, gst_omxtvp, GST_TYPE_BASE_TRANSFORM);
@@ -105,9 +101,9 @@ gst_omxtvp_class_init (GstOMXTvpClass * klass)
           "\n\t\t\t interlaced ", "progressive", G_PARAM_READWRITE));
 
   gst_element_class_set_details_simple (gstelement_class,
-    "OpenMAX TVP Initializer", "Filter",
-    "Initializes TVP hardware for video capture via component",
-    "Jose Lopez <jose.lopez@ridgerun.com>");
+      "OpenMAX TVP Initializer", "Filter",
+      "Initializes TVP hardware for video capture via component",
+      "Jose Lopez <jose.lopez@ridgerun.com>");
 
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&src_template));
@@ -123,8 +119,7 @@ gst_omxtvp_class_init (GstOMXTvpClass * klass)
   GST_BASE_TRANSFORM_CLASS (klass)->set_caps =
       GST_DEBUG_FUNCPTR (gst_omx_tvp_set_caps);
 
-  GST_BASE_TRANSFORM_CLASS (klass)->stop =
-      GST_DEBUG_FUNCPTR (gst_omx_tvp_stop);
+  GST_BASE_TRANSFORM_CLASS (klass)->stop = GST_DEBUG_FUNCPTR (gst_omx_tvp_stop);
 
   klass->cdata.component_name = "OMX.TI.VPSSM3.CTRL.TVP";
   klass->cdata.core_name = "/usr/lib/libOMX_Core.so";
@@ -136,7 +131,7 @@ gst_omxtvp_class_init (GstOMXTvpClass * klass)
 
 /* tvp object init */
 static void
-gst_omxtvp_init (GstOMXTvp *self)
+gst_omxtvp_init (GstOMXTvp * self)
 {
   self->standard = 1080;
   self->scan_type = OMX_VIDEO_CaptureScanTypeProgressive;
@@ -232,7 +227,8 @@ gst_omx_tvp_transform_ip (GstBaseTransform * base, GstBuffer * outbuf)
 }
 
 static gboolean
-gst_omx_tvp_set_caps (GstBaseTransform * base, GstCaps * incaps, GstCaps * outcaps)
+gst_omx_tvp_set_caps (GstBaseTransform * base, GstCaps * incaps,
+    GstCaps * outcaps)
 {
   return TRUE;
 }
@@ -240,8 +236,9 @@ gst_omx_tvp_set_caps (GstBaseTransform * base, GstCaps * incaps, GstCaps * outca
 static gboolean
 gst_omx_tvp_configure (GstOMXTvp * self)
 {
-  OMX_ERRORTYPE err;
   OMX_PARAM_CTRL_VIDDECODER_INFO viddec_param;
+  OMX_STATETYPE state;
+  OMX_ERRORTYPE err;
 
   GST_OMX_INIT_STRUCT (&viddec_param);
 
@@ -271,16 +268,16 @@ gst_omx_tvp_configure (GstOMXTvp * self)
   if (gst_omx_component_set_state (self->comp, OMX_StateIdle) != OMX_ErrorNone)
     return FALSE;
 
-  OMX_STATETYPE state;
   state = gst_omx_component_get_state (self->comp, GST_CLOCK_TIME_NONE);
-  GST_DEBUG_OBJECT(self, "Component state 0x%X", state);
+  GST_DEBUG_OBJECT (self, "Component state 0x%X", state);
 
   GST_DEBUG_OBJECT (self, "Changing state to Executing");
-  if (gst_omx_component_set_state (self->comp, OMX_StateExecuting) != OMX_ErrorNone)
+  if (gst_omx_component_set_state (self->comp,
+          OMX_StateExecuting) != OMX_ErrorNone)
     return FALSE;
 
   state = gst_omx_component_get_state (self->comp, GST_CLOCK_TIME_NONE);
-  GST_DEBUG_OBJECT(self, "Component state 0x%X", state);
+  GST_DEBUG_OBJECT (self, "Component state 0x%X", state);
 
   if (state != OMX_StateExecuting)
     return FALSE;

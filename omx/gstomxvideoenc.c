@@ -95,7 +95,8 @@ static gboolean gst_omx_video_enc_start (GstVideoEncoder * encoder);
 static gboolean gst_omx_video_enc_stop (GstVideoEncoder * encoder);
 static gboolean gst_omx_video_enc_set_format (GstVideoEncoder * encoder,
     GstVideoCodecState * state);
-static gboolean gst_omx_video_enc_flush (GstVideoEncoder * encoder);
+static gboolean gst_omx_video_enc_reset (GstVideoEncoder * encoder,
+    gboolean hard);
 static GstFlowReturn gst_omx_video_enc_handle_frame (GstVideoEncoder * encoder,
     GstVideoCodecFrame * frame);
 static gboolean gst_omx_video_enc_finish (GstVideoEncoder * encoder);
@@ -213,7 +214,7 @@ gst_omx_video_enc_class_init (GstOMXVideoEncClass * klass)
   video_encoder_class->close = GST_DEBUG_FUNCPTR (gst_omx_video_enc_close);
   video_encoder_class->start = GST_DEBUG_FUNCPTR (gst_omx_video_enc_start);
   video_encoder_class->stop = GST_DEBUG_FUNCPTR (gst_omx_video_enc_stop);
-  video_encoder_class->reset = GST_DEBUG_FUNCPTR (gst_omx_video_enc_flush);
+  video_encoder_class->reset = GST_DEBUG_FUNCPTR (gst_omx_video_enc_reset);
   video_encoder_class->set_format =
       GST_DEBUG_FUNCPTR (gst_omx_video_enc_set_format);
   video_encoder_class->handle_frame =
@@ -1321,7 +1322,7 @@ gst_omx_video_enc_set_format (GstVideoEncoder * encoder,
 }
 
 static gboolean
-gst_omx_video_enc_flush (GstVideoEncoder * encoder)
+gst_omx_video_enc_reset (GstVideoEncoder * encoder, gboolean hard)
 {
   GstOMXVideoEnc *self;
 
@@ -1670,7 +1671,7 @@ gst_omx_video_enc_handle_frame (GstVideoEncoder * encoder,
   GstOMXPort *port;
   GstOMXBuffer *buf = NULL;
   OMX_ERRORTYPE err;
-  GstOMXMemory *omxmem;
+  GstOMXMemory *omxmem = NULL;
 
   self = GST_OMX_VIDEO_ENC (encoder);
 

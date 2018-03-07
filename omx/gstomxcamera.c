@@ -187,6 +187,10 @@ static gboolean gst_omx_camera_negotiate (GstBaseSrc * basesrc);
 
 static gboolean gst_omx_camera_shutdown (GstOMXCamera * self);
 
+OMX_COLOR_FORMATTYPE gst_omx_camera_get_color_format (GstVideoFormat format);
+gint gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride,
+    gint height);
+
 static void
 gst_omx_camera_class_init (GstOMXCameraClass * klass)
 {
@@ -466,7 +470,7 @@ gst_omx_camera_event (GstBaseSrc * src, GstEvent * event)
 static gboolean
 gst_omx_camera_negotiate (GstBaseSrc * basesrc)
 {
-  GstCaps *thiscaps;
+  GstCaps *thiscaps = NULL;
   GstCaps *caps = NULL;
   GstCaps *peercaps = NULL;
   gboolean result = FALSE;
@@ -1148,7 +1152,7 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   GstOMXCamera *self = GST_OMX_CAMERA (src);
   GstFlowReturn ret;
   GstClock *clock;
-  GstClockTime abs_time, base_time, timestamp, duration;
+  GstClockTime abs_time, base_time, timestamp;
 
   /* timestamps, LOCK to get clock and base time. */
   GST_OBJECT_LOCK (self);

@@ -85,14 +85,23 @@ gst_omx_scaler_class_init (GstOMXScalerClass * klass)
   videofilter_class->cdata.default_sink_template_caps =
       "video/x-raw, " "format=(string)NV12,  width=(int) [ 16, 1920 ], "
       "height = (int) [ 16, 1200 ], framerate = " GST_VIDEO_FPS_RANGE;
+  videofilter_class->transform_caps =
+      GST_DEBUG_FUNCPTR (gst_omx_scaler_transform_caps);
+  videofilter_class->fixate_caps =
+      GST_DEBUG_FUNCPTR (gst_omx_scaler_fixate_caps);
+  videofilter_class->set_format = GST_DEBUG_FUNCPTR (gst_omx_scaler_set_format);
   videofilter_class->fixed_src_caps =
       GST_DEBUG_FUNCPTR (gst_omx_scaler_fixed_src_caps);
-  videofilter_class->set_format = GST_DEBUG_FUNCPTR (gst_omx_scaler_set_format);
   gst_element_class_set_static_metadata (element_class,
       "OpenMAX Video Scaler",
       "Filter/Encoder/Video",
       "Scale raw video streams",
       "Melissa Montero <melissa.montero@ridgerun.com>");
+}
+
+static void
+gst_omx_scaler_init (GstOMXScaler * self)
+{
 }
 
 static void
@@ -156,9 +165,9 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
 
   GST_DEBUG_OBJECT (videofilter,
       "Setting input channel resolution with Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
-      channel_resolution.Frm0Width, channel_resolution.Frm0Height,
-      channel_resolution.Frm0Pitch, channel_resolution.FrmCropWidth,
-      channel_resolution.FrmCropHeight);
+      (int) channel_resolution.Frm0Width, (int) channel_resolution.Frm0Height,
+      (int) channel_resolution.Frm0Pitch, (int) channel_resolution.FrmCropWidth,
+      (int) channel_resolution.FrmCropHeight);
 
   err = gst_omx_component_set_config (videofilter->comp,
       OMX_TI_IndexConfigVidChResolution, &channel_resolution);
@@ -188,9 +197,9 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
 
   GST_DEBUG_OBJECT (videofilter,
       "Setting output channel resolution with Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
-      channel_resolution.Frm0Width, channel_resolution.Frm0Height,
-      channel_resolution.Frm0Pitch, channel_resolution.FrmCropWidth,
-      channel_resolution.FrmCropHeight);
+      (int) channel_resolution.Frm0Width, (int) channel_resolution.Frm0Height,
+      (int) channel_resolution.Frm0Pitch, (int) channel_resolution.FrmCropWidth,
+      (int) channel_resolution.FrmCropHeight);
 
   err = gst_omx_component_set_config (videofilter->comp,
       OMX_TI_IndexConfigVidChResolution, &channel_resolution);
@@ -255,7 +264,8 @@ gst_omx_scaler_transform_caps (GstOMXVideoFilter * videofilter,
   GstStructure *structure;
   const GValue *value;
   GstCaps *retcaps;
-  guint width, height;
+  guint width = 0;
+  guint height = 0;
   guint min_width, min_height, max_width, max_height;
   gint n, i;
 
