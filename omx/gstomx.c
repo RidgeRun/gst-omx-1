@@ -1730,7 +1730,7 @@ gst_omx_port_allocate_buffers_unlocked (GstOMXPort * port,
       goto done;
     }
 
-    GST_INFO_OBJECT (comp->parent, "%s: allocated buffer %p (%p)",
+    GST_DEBUG_OBJECT (comp->parent, "%s: allocated buffer %p (%p)",
         comp->name, buf, buf->omx_buf->pBuffer);
 
     g_assert (buf->omx_buf->pAppPrivate == buf);

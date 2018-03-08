@@ -510,7 +510,7 @@ gst_omx_buffer_pool_acquire_buffer (GstBufferPool * bpool,
       *buffer = gst_atomic_queue_pop (pool->queue);
       if (G_LIKELY (*buffer)) {
         ret = GST_FLOW_OK;
-        GST_ERROR_OBJECT (pool, "acquired buffer %p", *buffer);
+        GST_DEBUG_OBJECT (pool, "acquired buffer %p", *buffer);
         acquired = TRUE;
       } else {
         g_get_current_time (&wait_end);

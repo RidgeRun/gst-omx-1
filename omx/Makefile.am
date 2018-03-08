@@ -80,7 +80,6 @@ endif
 
 libgstomx_la_CFLAGS = \
 	-DGST_USE_UNSTABLE_API=1 \
-	$(OMXCORE_CFLAGS) \
 	$(OMX_INCLUDEPATH) \
 	$(GST_GL_CFLAGS) \
 	$(GST_PLUGINS_BASE_CFLAGS) \
@@ -88,7 +87,6 @@ libgstomx_la_CFLAGS = \
 	$(GST_CFLAGS) \
 	$(GMODULE_NO_EXPORT_CFLAGS)
 libgstomx_la_LIBADD = \
-	$(OMXCORE_LIBS) \
 	$(GST_GL_LIBS) \
 	$(GST_PLUGINS_BASE_LIBS) \
 	-lgstaudio-@GST_API_VERSION@ \
