@@ -66,7 +66,6 @@ G_DEFINE_TYPE_WITH_CODE (GstOMXScaler, gst_omx_scaler,
 static void
 gst_omx_scaler_class_init (GstOMXScalerClass * klass)
 {
-  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstOMXVideoFilterClass *videofilter_class =
       GST_OMX_VIDEO_FILTER_CLASS (klass);

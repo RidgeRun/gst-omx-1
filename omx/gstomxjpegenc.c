@@ -164,6 +164,7 @@ gst_omx_jpeg_enc_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_QUALITY:
       self->quality = g_value_get_int (value);
+      gst_omx_jpeg_enc_set_format (GST_OMX_VIDEO_ENC (object), NULL, NULL);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
