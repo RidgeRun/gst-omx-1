@@ -58,6 +58,10 @@ static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_STATIC_CAPS ("ANY")
     );
 
+#define GST_OMX_TVP_STANDARD_720  720
+#define GST_OMX_TVP_STANDARD_1080 1080
+#define PROP_STANDARD_DEFAULT     GST_OMX_TVP_STANDARD_1080
+
 #define gst_omx_tvp_parent_class parent_class
 G_DEFINE_TYPE (GstOMXTvp, gst_omx_tvp, GST_TYPE_BASE_TRANSFORM);
 
@@ -67,10 +71,6 @@ static void gst_omx_tvp_set_property (GObject * object, guint prop_id,
 static void gst_omx_tvp_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static gboolean gst_omx_tvp_start (GstBaseTransform * base);
-static GstFlowReturn gst_omx_tvp_transform_ip (GstBaseTransform * base,
-    GstBuffer * outbuf);
-static gboolean gst_omx_tvp_set_caps (GstBaseTransform * base,
-    GstCaps * incaps, GstCaps * outcaps);
 static gboolean gst_omx_tvp_stop (GstBaseTransform * base);
 static gboolean gst_omx_tvp_configure (GstOMXTvp * self);
 
@@ -89,10 +89,12 @@ gst_omx_tvp_class_init (GstOMXTvpClass * klass)
   gobject_class->set_property = gst_omx_tvp_set_property;
   gobject_class->get_property = gst_omx_tvp_get_property;
 
+  /* TODO: Use enums for property installation */
   g_object_class_install_property (gobject_class, PROP_STANDARD,
       g_param_spec_uint ("standard", "Video standard",
-          "Video Standard to use: 1080 | 720",
-          720, 1080, 1080, G_PARAM_READWRITE));
+          "Video Standard to use: 1080 or 720",
+          GST_OMX_TVP_STANDARD_720, GST_OMX_TVP_STANDARD_1080,
+          PROP_STANDARD_DEFAULT, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_SCAN_TYPE,
       g_param_spec_string ("scan-type", "Video scan type",
@@ -112,12 +114,6 @@ gst_omx_tvp_class_init (GstOMXTvpClass * klass)
 
   GST_BASE_TRANSFORM_CLASS (klass)->start =
       GST_DEBUG_FUNCPTR (gst_omx_tvp_start);
-
-  GST_BASE_TRANSFORM_CLASS (klass)->transform_ip =
-      GST_DEBUG_FUNCPTR (gst_omx_tvp_transform_ip);
-
-  GST_BASE_TRANSFORM_CLASS (klass)->set_caps =
-      GST_DEBUG_FUNCPTR (gst_omx_tvp_set_caps);
 
   GST_BASE_TRANSFORM_CLASS (klass)->stop = GST_DEBUG_FUNCPTR (gst_omx_tvp_stop);
 
@@ -140,7 +136,7 @@ gst_omx_tvp_class_init (GstOMXTvpClass * klass)
 static void
 gst_omx_tvp_init (GstOMXTvp * self)
 {
-  self->standard = 1080;
+  self->standard = PROP_STANDARD_DEFAULT;
   self->scan_type = OMX_VIDEO_CaptureScanTypeProgressive;
   self->mode_configured = FALSE;
 }
@@ -221,25 +217,6 @@ gst_omx_tvp_start (GstBaseTransform * base)
   return TRUE;
 }
 
-static GstFlowReturn
-gst_omx_tvp_transform_ip (GstBaseTransform * base, GstBuffer * outbuf)
-{
-  GstOMXTvp *self = GST_OMX_TVP (base);
-
-  /* return if tvp is configured */
-  if (self->mode_configured)
-    return GST_FLOW_OK;
-  else
-    return GST_FLOW_ERROR;
-}
-
-static gboolean
-gst_omx_tvp_set_caps (GstBaseTransform * base, GstCaps * incaps,
-    GstCaps * outcaps)
-{
-  return TRUE;
-}
-
 static gboolean
 gst_omx_tvp_configure (GstOMXTvp * self)
 {
@@ -251,7 +228,7 @@ gst_omx_tvp_configure (GstOMXTvp * self)
 
   /* Set omx control param according to scan type and standard */
   if (self->scan_type == OMX_VIDEO_CaptureScanTypeProgressive) {
-    if (self->standard == 1080)
+    if (self->standard == GST_OMX_TVP_STANDARD_1080)
       viddec_param.videoStandard = OMX_VIDEO_DECODER_STD_1080P_60;
     else
       viddec_param.videoStandard = OMX_VIDEO_DECODER_STD_720P_60;
@@ -263,6 +240,8 @@ gst_omx_tvp_configure (GstOMXTvp * self)
   viddec_param.videoDecoderId = OMX_VID_DEC_TVP7002_DRV;
   viddec_param.videoSystemId = OMX_VIDEO_DECODER_VIDEO_SYSTEM_AUTO_DETECT;
 
+  /* FIXME: Even omx returns OMX_ErrorNone apparently the 'set' operation
+     is not going through, leaving component with incorrect configuration */
   err = gst_omx_component_set_parameter (self->comp,
       (OMX_INDEXTYPE) OMX_TI_IndexParamCTRLVidDecInfo, &viddec_param);
 
