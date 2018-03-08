@@ -47,7 +47,6 @@
 #include "gstomxanalogaudiosink.h"
 #include "gstomxhdmiaudiosink.h"
 #include "gstomxcamera.h"
-#include "gstomxtvp.h"
 #include "gstomxscaler.h"
 
 GST_DEBUG_CATEGORY (gstomx_debug);
@@ -2351,7 +2350,6 @@ static const struct TypeOffest base_types[] = {
   {gst_omx_video_filter_get_type, G_STRUCT_OFFSET (GstOMXVideoFilterClass,
           cdata)},
   {gst_omx_camera_get_type, G_STRUCT_OFFSET (GstOMXCameraClass, cdata)},
-  {gst_omx_tvp_get_type, G_STRUCT_OFFSET (GstOMXTvpClass, cdata)},
 };
 
 static GKeyFile *config = NULL;
