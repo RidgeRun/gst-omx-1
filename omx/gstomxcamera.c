@@ -260,6 +260,10 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
 
   pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_camera_create);
 
+  klass->cdata.type = GST_OMX_COMPONENT_TYPE_SOURCE;
+  klass->cdata.default_src_template_caps = "video/x-raw, "
+      "width = " GST_VIDEO_SIZE_RANGE ", " "format = (string) {YUY2, NV12}, "
+      "height = " GST_VIDEO_SIZE_RANGE ", " "framerate = " GST_VIDEO_FPS_RANGE;
   klass->cdata.component_name = "OMX.TI.VPSSM3.VFCC";
   klass->cdata.core_name = "/usr/lib/libOMX_Core.so";
   klass->cdata.in_port_index = -1;

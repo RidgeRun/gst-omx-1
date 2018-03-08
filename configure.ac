@@ -360,7 +360,7 @@ AC_SUBST(GST_OMX_CFLAGS)
 
 dnl FIXME: do we want to rename to GST_ALL_* ?
 dnl add GST_OPTION_CFLAGS, but overridable
-GST_CFLAGS="$GLIB_CFLAGS $GST_CFLAGS $GLIB_EXTRA_CFLAGS \$(GST_OPTION_CFLAGS)"
+GST_CFLAGS="$GST_CFLAGS $GLIB_EXTRA_CFLAGS $(GST_OPTION_CFLAGS)"
 AC_SUBST(GST_CFLAGS)
 dnl add GCOV libs because libtool strips -fprofile-arcs -ftest-coverage
 GST_LIBS="$GST_LIBS \$(GCOV_LIBS)"

@@ -2327,9 +2327,9 @@ static const GGetTypeFunction types[] = {
   gst_omx_aac_enc_get_type, gst_omx_mjpeg_dec_get_type,
   gst_omx_aac_dec_get_type, gst_omx_mp3_dec_get_type,
   gst_omx_amr_dec_get_type, gst_omx_jpeg_enc_get_type,
-  gst_omx_scaler_get_type
+  gst_omx_scaler_get_type, gst_omx_camera_get_type,
 #ifdef HAVE_VP8
-      , gst_omx_vp8_dec_get_type
+  , gst_omx_vp8_dec_get_type
 #endif
 #ifdef HAVE_THEORA
       , gst_omx_theora_dec_get_type
@@ -2350,6 +2350,8 @@ static const struct TypeOffest base_types[] = {
   {gst_omx_audio_enc_get_type, G_STRUCT_OFFSET (GstOMXAudioEncClass, cdata)},
   {gst_omx_video_filter_get_type, G_STRUCT_OFFSET (GstOMXVideoFilterClass,
           cdata)},
+  {gst_omx_camera_get_type, G_STRUCT_OFFSET (GstOMXCameraClass, cdata)},
+  {gst_omx_tvp_get_type, G_STRUCT_OFFSET (GstOMXTvpClass, cdata)},
 };
 
 static GKeyFile *config = NULL;
@@ -2865,12 +2867,6 @@ plugin_init (GstPlugin * plugin)
     ret |= gst_element_register (plugin, elements[i], rank, subtype);
   }
   g_strfreev (elements);
-
-  ret |= gst_element_register (plugin, "omxcamera", GST_RANK_NONE,
-      gst_omx_camera_get_type ());
-  ret |= gst_element_register (plugin, "omxtvp", GST_RANK_NONE,
-      gst_omxtvp_get_type ());
-
 done:
   g_free (env_config_dir);
   g_free (config_dirs);
