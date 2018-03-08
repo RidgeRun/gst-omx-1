@@ -346,7 +346,7 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
     pcm_param.nChannels = 2;
     pcm_param.eChannelMapping[0] = OMX_AUDIO_ChannelLF;
     pcm_param.eChannelMapping[1] = OMX_AUDIO_ChannelRF;
-    pcm_param.eNumData = 1;
+    pcm_param.eNumData = OMX_NumericalDataSigned;
     pcm_param.eEndian = 1;
     pcm_param.nBitPerSample = 16;
     pcm_param.nSamplingRate = 44100;
