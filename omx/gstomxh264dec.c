@@ -57,7 +57,6 @@ gst_omx_h264_dec_class_init (GstOMXH264DecClass * klass)
 
   videodec_class->is_format_change =
       GST_DEBUG_FUNCPTR (gst_omx_h264_dec_is_format_change);
-  videodec_class->set_format = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_set_format);
 
   videodec_class->cdata.default_sink_template_caps = "video/x-h264, "
       "parsed=(boolean) true, "
@@ -135,7 +134,7 @@ gst_omx_h264_dec_set_format (GstOMXVideoDec * dec, GstOMXPort * port,
   if (err != OMX_ErrorNone) {
     GST_WARNING_OBJECT (self,
         "Getting profile/level not supported by component");
-    return TRUE;
+    return FALSE;
   }
 
   peercaps = gst_pad_peer_query_caps (GST_VIDEO_DECODER_SINK_PAD (dec),
