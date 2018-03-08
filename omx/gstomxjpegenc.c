@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 RidgerRun LLC
+ * Copyright (C) 2018 RidgerRun LLC
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -86,7 +86,7 @@ gst_omx_jpeg_enc_class_init (GstOMXJpegEncClass * klass)
       "Encode MJPEG video streams with OpenMax IL",
       "Melissa Montero <melissa.montero@ridgerun.com>");
 
-  gst_omx_set_default_role (&videoenc_class->cdata, "video_encoder.avc");
+  gst_omx_set_default_role (&videoenc_class->cdata, "video_encoder.mjpeg");
 }
 
 static void

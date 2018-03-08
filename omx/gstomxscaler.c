@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 RidgerRun LLC
+ * Copyright (C) 2018 RidgerRun LLC
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -34,10 +34,6 @@ GST_DEBUG_CATEGORY_STATIC (gst_omx_scaler_debug_category);
 #define GST_CAT_DEFAULT gst_omx_scaler_debug_category
 
 /* prototypes */
-static void gst_omx_scaler_set_property (GObject * object, guint prop_id,
-    const GValue * value, GParamSpec * pspec);
-static void gst_omx_scaler_get_property (GObject * object, guint prop_id,
-    GValue * value, GParamSpec * pspec);
 static GstCaps *gst_omx_scaler_transform_caps (GstOMXVideoFilter * self,
     GstPadDirection direction, GstPad * srcpad, GstCaps * caps,
     GstCaps * filter);
@@ -75,9 +71,6 @@ gst_omx_scaler_class_init (GstOMXScalerClass * klass)
   GstOMXVideoFilterClass *videofilter_class =
       GST_OMX_VIDEO_FILTER_CLASS (klass);
 
-  gobject_class->set_property = gst_omx_scaler_set_property;
-  gobject_class->get_property = gst_omx_scaler_get_property;
-
   videofilter_class->num_outputs = 1;
   videofilter_class->cdata.default_src_template_caps = "video/x-raw,"
       "format=(string)YUY2, width=(int) [ 16, 1920 ], "
@@ -94,7 +87,7 @@ gst_omx_scaler_class_init (GstOMXScalerClass * klass)
       GST_DEBUG_FUNCPTR (gst_omx_scaler_fixed_src_caps);
   gst_element_class_set_static_metadata (element_class,
       "OpenMAX Video Scaler",
-      "Filter/Encoder/Video",
+      "Filter/Scaler/Video",
       "Scale raw video streams",
       "Melissa Montero <melissa.montero@ridgerun.com>");
 }
@@ -102,28 +95,6 @@ gst_omx_scaler_class_init (GstOMXScalerClass * klass)
 static void
 gst_omx_scaler_init (GstOMXScaler * self)
 {
-}
-
-static void
-gst_omx_scaler_set_property (GObject * object, guint prop_id,
-    const GValue * value, GParamSpec * pspec)
-{
-  switch (prop_id) {
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-  }
-}
-
-static void
-gst_omx_scaler_get_property (GObject * object, guint prop_id, GValue * value,
-    GParamSpec * pspec)
-{
-  switch (prop_id) {
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-  }
 }
 
 static gboolean
