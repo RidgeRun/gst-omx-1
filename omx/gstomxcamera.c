@@ -63,17 +63,6 @@ enum
 
 #define gst_omx_camera_parent_class parent_class
 G_DEFINE_TYPE (GstOMXCamera, gst_omx_camera, GST_TYPE_PUSH_SRC);
-/*
- * Caps:
- */
-static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
-    GST_PAD_SRC,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-raw, "
-        "format = (string) {YUY2, NV12}, "
-        "width = (int) [ 16, 3840 ], "
-        "height = (int) [ 16, 2160 ] , " "framerate = " GST_VIDEO_FPS_RANGE)
-    );
 
 #define MAX_SHIFTS	30
 /* Properties defaults */
@@ -247,9 +236,6 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
       "OpenMAX Video Source", "Source/Video",
       "Reads frames from a camera device",
       "Melissa Montero <melissa.montero@uridgerun.com>");
-
-  gst_element_class_add_pad_template (element_class,
-      gst_static_pad_template_get (&src_template));
 
   basesrc_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
   basesrc_class->start = GST_DEBUG_FUNCPTR (gst_omx_camera_start);
