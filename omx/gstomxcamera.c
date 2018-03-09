@@ -408,6 +408,9 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
   GstStructure *structure;
   gint i;
 
+  g_return_val_if_fail (basesrc, NULL);
+  g_return_val_if_fail (caps, NULL);
+
   GST_DEBUG_OBJECT (basesrc, "fixating caps %" GST_PTR_FORMAT, caps);
 
   caps = gst_caps_make_writable (caps);
@@ -478,6 +481,8 @@ gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride, gint height)
 static gboolean
 gst_omx_camera_drain (GstOMXCamera * self)
 {
+  g_return_val_if_fail (self, FALSE);
+
   if (self->outport)
     gst_omx_port_set_flushing (self->outport, 5 * GST_SECOND, TRUE);
 
@@ -495,7 +500,6 @@ static gboolean
 gst_omx_camera_set_format (GstOMXCamera * self, GstCaps * caps,
     GstVideoInfo * info)
 {
-
   gboolean needs_disable = FALSE;
   OMX_PARAM_PORTDEFINITIONTYPE port_def;
   OMX_PARAM_BUFFER_MEMORYTYPE mem_type;
@@ -503,6 +507,10 @@ gst_omx_camera_set_format (GstOMXCamera * self, GstCaps * caps,
   OMX_PARAM_VFCC_HWPORT_ID hw_port;
   OMX_ERRORTYPE err;
   GstStructure *config;
+
+  g_return_val_if_fail (self, FALSE);
+  g_return_val_if_fail (caps, FALSE);
+  g_return_val_if_fail (info, FALSE);
 
   GST_DEBUG_OBJECT (self, "Setting new format");
 
@@ -621,9 +629,14 @@ config_pool_failed:
 static gboolean
 gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 {
-  GstOMXCamera *self = GST_OMX_CAMERA (src);
-  GstVideoInfo info;
+  GstOMXCamera * self = NULL;
   gchar *caps_str = NULL;
+  GstVideoInfo info;
+
+  g_return_val_if_fail (src, FALSE);
+  g_return_val_if_fail (caps, FALSE);
+
+  self = GST_OMX_CAMERA (src);
 
   GST_INFO_OBJECT (self, "set caps (%" GST_PTR_FORMAT "): %s", caps, caps_str =
       gst_caps_to_string (caps));
@@ -644,7 +657,9 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 static gboolean
 gst_omx_camera_start (GstBaseSrc * bsrc)
 {
+  g_return_val_if_fail (bsrc, FALSE);
   GstOMXCamera *self = GST_OMX_CAMERA (bsrc);
+
   GST_DEBUG_OBJECT (self, "Starting omxcamera");
 
   if (!gst_omx_camera_open (self))
@@ -656,6 +671,7 @@ gst_omx_camera_start (GstBaseSrc * bsrc)
 static gboolean
 gst_omx_camera_stop (GstBaseSrc * bsrc)
 {
+  g_return_val_if_fail (bsrc, FALSE);
   GstOMXCamera *self = GST_OMX_CAMERA (bsrc);
 
   GST_DEBUG_OBJECT (self, "Stopping omxcamera");
@@ -677,9 +693,13 @@ gst_omx_camera_stop (GstBaseSrc * bsrc)
 static gboolean
 gst_omx_camera_open (GstOMXCamera * self)
 {
-  GstOMXCameraClass *klass = GST_OMX_CAMERA_GET_CLASS (self);
+  GstOMXCameraClass *klass = NULL;
   GstBufferPool *pool;
   gint port_index;
+
+  g_return_val_if_fail (self, FALSE);
+
+  klass = GST_OMX_CAMERA_GET_CLASS (self);
 
   self->started = FALSE;
   self->sharing = FALSE;
@@ -737,6 +757,7 @@ static gboolean
 gst_omx_camera_shutdown (GstOMXCamera * self)
 {
   OMX_STATETYPE state;
+  g_return_val_if_fail (self, FALSE);
 
   GST_DEBUG_OBJECT (self, "Shutting down omxcamera");
 
@@ -766,6 +787,7 @@ gst_omx_camera_shutdown (GstOMXCamera * self)
 static gboolean
 gst_omx_camera_close (GstOMXCamera * self)
 {
+  g_return_val_if_fail (self, FALSE);
   GstOMXCameraClass *klass = GST_OMX_CAMERA_GET_CLASS (self);
 
   GST_DEBUG_OBJECT (self, "Closing omxcamera");
@@ -791,12 +813,19 @@ gst_omx_camera_close (GstOMXCamera * self)
 static GstFlowReturn
 gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
 {
-  GstOMXPort *port = self->outport;
-  GstOMXBuffer *buf = NULL;
-  GstOMXAcquireBufferReturn acq_return;
   OMX_ERRORTYPE err;
-  GstBufferPool *pool = self->outpool;
   GstFlowReturn flow_ret;
+  GstOMXAcquireBufferReturn acq_return;
+
+  GstOMXBuffer *buf = NULL;
+  GstOMXPort *port = NULL;
+  GstBufferPool *pool = NULL;
+
+  g_return_val_if_fail (self, GST_FLOW_ERROR);
+  g_return_val_if_fail (outbuf, GST_FLOW_ERROR);
+
+  port = self->outport;
+  pool = self->outpool;
 
   acq_return = gst_omx_port_acquire_buffer (port, &buf);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
@@ -916,6 +945,8 @@ release_error:
 static gboolean
 gst_omx_camera_component_init (GstOMXCamera * self, GList * buffers)
 {
+  g_return_val_if_fail (self, FALSE);
+
   GST_DEBUG_OBJECT (self, "Enabling buffers");
   if (gst_omx_port_set_enabled (self->outport, TRUE) != OMX_ErrorNone)
     return FALSE;
@@ -973,10 +1004,15 @@ gst_omx_camera_component_init (GstOMXCamera * self, GList * buffers)
 static GstFlowReturn
 gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
 {
-  GstOMXCamera *self = GST_OMX_CAMERA (src);
-  GstFlowReturn ret;
   GstClock *clock;
+  GstFlowReturn ret;
   GstClockTime abs_time, base_time, timestamp;
+  GstOMXCamera *self = NULL;
+
+  g_return_val_if_fail (src, GST_FLOW_ERROR);
+  g_return_val_if_fail (buf, GST_FLOW_ERROR);
+
+  self = GST_OMX_CAMERA (src);
 
   /* timestamps, LOCK to get clock and base time. */
   GST_OBJECT_LOCK (self);
