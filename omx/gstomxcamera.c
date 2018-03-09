@@ -160,10 +160,6 @@ static void gst_omx_camera_set_property (GObject * object, guint prop_id,
 static void gst_omx_camera_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-/* element methods */
-static GstStateChangeReturn gst_omx_camera_change_state (GstElement * element,
-    GstStateChange transition);
-
 /* basesrc methods */
 static gboolean gst_omx_camera_start (GstBaseSrc * src);
 static gboolean gst_omx_camera_stop (GstBaseSrc * src);
@@ -178,6 +174,10 @@ static OMX_COLOR_FORMATTYPE gst_omx_camera_get_color_format (GstVideoFormat
     format);
 static gint gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride,
     gint height);
+
+/* class methods */
+static gboolean gst_omx_camera_open (GstOMXCamera * self);
+static gboolean gst_omx_camera_close (GstOMXCamera * self);
 
 static void
 gst_omx_camera_class_init (GstOMXCameraClass * klass)
@@ -228,8 +228,6 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
       g_param_spec_uint ("skip-frames", "Skip Frames",
           "Skip this amount of frames after a vaild frame",
           0, 30, PROP_SKIP_FRAMES_DEFAULT, G_PARAM_READWRITE));
-
-  element_class->change_state = gst_omx_camera_change_state;
 
   gst_element_class_set_static_metadata (element_class,
       "OpenMAX Video Source", "Source/Video",
@@ -646,6 +644,12 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 static gboolean
 gst_omx_camera_start (GstBaseSrc * bsrc)
 {
+  GstOMXCamera *self = GST_OMX_CAMERA (bsrc);
+  GST_DEBUG_OBJECT (self, "Starting element");
+
+  if (!gst_omx_camera_open (self))
+    return FALSE;
+
   return TRUE;
 }
 
@@ -663,6 +667,9 @@ gst_omx_camera_stop (GstBaseSrc * bsrc)
   self->sharing = FALSE;
 
   gst_omx_component_get_state (self->comp, 5 * GST_SECOND);
+
+  if (!gst_omx_camera_close (self))
+    return FALSE;
 
   return TRUE;
 }
@@ -779,39 +786,6 @@ gst_omx_camera_close (GstOMXCamera * self)
 
   GST_INFO_OBJECT (self, "Closed component %s", klass->cdata.component_name);
   return TRUE;
-}
-
-
-static GstStateChangeReturn
-gst_omx_camera_change_state (GstElement * element, GstStateChange transition)
-{
-  GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
-  GstOMXCamera *self = GST_OMX_CAMERA (element);
-
-  switch (transition) {
-    case GST_STATE_CHANGE_NULL_TO_READY:
-      /* open the component */
-      if (!gst_omx_camera_open (self))
-        return GST_STATE_CHANGE_FAILURE;
-      break;
-    default:
-      break;
-  }
-
-  ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
-
-  switch (transition) {
-    case GST_STATE_CHANGE_READY_TO_NULL:
-      /* close the component */
-      if (!gst_omx_camera_close (self))
-        return GST_STATE_CHANGE_FAILURE;
-
-      break;
-    default:
-      break;
-  }
-
-  return ret;
 }
 
 static GstFlowReturn
