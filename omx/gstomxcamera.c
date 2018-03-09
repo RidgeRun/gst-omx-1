@@ -171,13 +171,12 @@ static gboolean gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps);
 
 static GstFlowReturn gst_omx_camera_create (GstPushSrc * src, GstBuffer ** out);
 static GstCaps *gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps);
-static gboolean gst_omx_camera_event (GstBaseSrc * src, GstEvent * event);
-static gboolean gst_omx_camera_negotiate (GstBaseSrc * basesrc);
 
 static gboolean gst_omx_camera_shutdown (GstOMXCamera * self);
 
-OMX_COLOR_FORMATTYPE gst_omx_camera_get_color_format (GstVideoFormat format);
-gint gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride,
+static OMX_COLOR_FORMATTYPE gst_omx_camera_get_color_format (GstVideoFormat
+    format);
+static gint gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride,
     gint height);
 
 static void
@@ -241,8 +240,6 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
   basesrc_class->start = GST_DEBUG_FUNCPTR (gst_omx_camera_start);
   basesrc_class->stop = GST_DEBUG_FUNCPTR (gst_omx_camera_stop);
   basesrc_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
-  basesrc_class->event = GST_DEBUG_FUNCPTR (gst_omx_camera_event);
-  basesrc_class->negotiate = GST_DEBUG_FUNCPTR (gst_omx_camera_negotiate);
 
   pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_camera_create);
 
@@ -250,11 +247,6 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
   klass->cdata.default_src_template_caps = "video/x-raw, "
       "width = " GST_VIDEO_SIZE_RANGE ", " "format = (string) {YUY2, NV12}, "
       "height = " GST_VIDEO_SIZE_RANGE ", " "framerate = " GST_VIDEO_FPS_RANGE;
-  klass->cdata.component_name = "OMX.TI.VPSSM3.VFCC";
-  klass->cdata.core_name = "/usr/lib/libOMX_Core.so";
-  klass->cdata.in_port_index = -1;
-  klass->cdata.out_port_index = OMX_VFCC_OUTPUT_PORT_START_INDEX;
-  klass->cdata.hacks = GST_OMX_HACK_NO_COMPONENT_ROLE;
 
   GST_DEBUG_CATEGORY_INIT (gst_omx_camera_debug, "omxcamera", 0,
       "OMX video source element");
@@ -429,8 +421,7 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
        and the maximum framerate resolution for that size */
     gst_structure_fixate_field_nearest_int (structure, "width", 320);
     gst_structure_fixate_field_nearest_int (structure, "height", 240);
-    gst_structure_fixate_field_nearest_fraction (structure, "framerate",
-        G_MAXINT, 1);
+    gst_structure_fixate_field_nearest_fraction (structure, "framerate", 30, 1);
     gst_structure_fixate_field (structure, "format");
   }
 
@@ -441,138 +432,7 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
   return caps;
 }
 
-static gboolean
-gst_omx_camera_event (GstBaseSrc * src, GstEvent * event)
-{
-  GST_DEBUG_OBJECT (src, "handle event %" GST_PTR_FORMAT, event);
-
-  switch (GST_EVENT_TYPE (event)) {
-    case GST_EVENT_RECONFIGURE:
-      gst_pad_check_reconfigure (GST_BASE_SRC_PAD (src));
-      break;
-    default:
-      break;
-  }
-  return GST_BASE_SRC_CLASS (parent_class)->event (src, event);
-}
-
-
-static gboolean
-gst_omx_camera_negotiate (GstBaseSrc * basesrc)
-{
-  GstCaps *thiscaps = NULL;
-  GstCaps *caps = NULL;
-  GstCaps *peercaps = NULL;
-  gboolean result = FALSE;
-
-  GST_DEBUG_OBJECT (basesrc, "negotiate caps: %" GST_PTR_FORMAT, thiscaps);
-  /* first see what is possible on our source pad */
-  thiscaps = gst_pad_query_caps (GST_BASE_SRC_PAD (basesrc), NULL);
-  GST_DEBUG_OBJECT (basesrc, "caps of src: %" GST_PTR_FORMAT, thiscaps);
-
-  /* nothing or anything is allowed, we're done */
-  if (thiscaps == NULL || gst_caps_is_any (thiscaps))
-    goto no_nego_needed;
-
-  /* get the peer caps */
-  peercaps = gst_pad_peer_query_caps (GST_BASE_SRC_PAD (basesrc), thiscaps);
-  GST_DEBUG_OBJECT (basesrc, "caps of peer: %" GST_PTR_FORMAT, peercaps);
-  if (peercaps && !gst_caps_is_any (peercaps)) {
-    GstCaps *icaps = NULL;
-    int i;
-
-    /* Prefer the first caps we are compatible with that the peer proposed */
-    for (i = 0; i < gst_caps_get_size (peercaps); i++) {
-      /* get intersection */
-      GstCaps *ipcaps = gst_caps_copy_nth (peercaps, i);
-
-      GST_DEBUG_OBJECT (basesrc, "peer: %" GST_PTR_FORMAT, ipcaps);
-
-      icaps = gst_caps_intersect (thiscaps, ipcaps);
-      gst_caps_unref (ipcaps);
-
-      if (!gst_caps_is_empty (icaps))
-        break;
-
-      gst_caps_unref (icaps);
-      icaps = NULL;
-    }
-
-    GST_DEBUG_OBJECT (basesrc, "intersect: %" GST_PTR_FORMAT, icaps);
-    if (icaps) {
-      /* If there are multiple intersections pick the one with the smallest
-       * resolution strictly bigger than the first peer caps */
-      if (gst_caps_get_size (icaps) > 1) {
-        GstStructure *s = gst_caps_get_structure (peercaps, 0);
-        int best = 0;
-        int twidth, theight;
-        int width = G_MAXINT, height = G_MAXINT;
-
-        if (gst_structure_get_int (s, "width", &twidth)
-            && gst_structure_get_int (s, "height", &theight)) {
-
-          /* Walk the structure backwards to get the first entry of the
-           * smallest resolution bigger (or equal to) the preferred resolution)
-           */
-          for (i = gst_caps_get_size (icaps) - 1; i >= 0; i--) {
-            GstStructure *is = gst_caps_get_structure (icaps, i);
-            int w, h;
-
-            if (gst_structure_get_int (is, "width", &w)
-                && gst_structure_get_int (is, "height", &h)) {
-              if (w >= twidth && w <= width && h >= theight && h <= height) {
-                width = w;
-                height = h;
-                best = i;
-              }
-            }
-          }
-        }
-
-        caps = gst_caps_copy_nth (icaps, best);
-        gst_caps_unref (icaps);
-      } else {
-        caps = icaps;
-      }
-    }
-    gst_caps_unref (thiscaps);
-  } else {
-    /* no peer or peer have ANY caps, work with our own caps then */
-    caps = thiscaps;
-  }
-  if (peercaps)
-    gst_caps_unref (peercaps);
-  if (caps) {
-    caps = gst_caps_truncate (caps);
-
-    /* now fixate */
-    if (!gst_caps_is_empty (caps)) {
-      caps = gst_omx_camera_fixate (basesrc, caps);
-      GST_DEBUG_OBJECT (basesrc, "fixated to: %" GST_PTR_FORMAT, caps);
-
-      if (gst_caps_is_any (caps)) {
-        /* hmm, still anything, so element can do anything and
-         * nego is not needed */
-        result = TRUE;
-      } else if (gst_caps_is_fixed (caps)) {
-        /* yay, fixed caps, use those then */
-        result = gst_base_src_set_caps (basesrc, caps);
-      }
-    }
-    gst_caps_unref (caps);
-  }
-  return result;
-
-no_nego_needed:
-  {
-    GST_DEBUG_OBJECT (basesrc, "no negotiation needed");
-    if (thiscaps)
-      gst_caps_unref (thiscaps);
-    return TRUE;
-  }
-}
-
-OMX_COLOR_FORMATTYPE
+static OMX_COLOR_FORMATTYPE
 gst_omx_camera_get_color_format (GstVideoFormat format)
 {
   OMX_COLOR_FORMATTYPE omx_format;
@@ -594,7 +454,7 @@ gst_omx_camera_get_color_format (GstVideoFormat format)
   return omx_format;
 }
 
-gint
+static gint
 gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride, gint height)
 {
   gint buffer_size;
