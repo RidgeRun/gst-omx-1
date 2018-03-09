@@ -645,7 +645,7 @@ static gboolean
 gst_omx_camera_start (GstBaseSrc * bsrc)
 {
   GstOMXCamera *self = GST_OMX_CAMERA (bsrc);
-  GST_DEBUG_OBJECT (self, "Starting element");
+  GST_DEBUG_OBJECT (self, "Starting omxcamera");
 
   if (!gst_omx_camera_open (self))
     return FALSE;
@@ -658,7 +658,7 @@ gst_omx_camera_stop (GstBaseSrc * bsrc)
 {
   GstOMXCamera *self = GST_OMX_CAMERA (bsrc);
 
-  GST_DEBUG_OBJECT (self, "Stopping element");
+  GST_DEBUG_OBJECT (self, "Stopping omxcamera");
 
   if (gst_omx_component_get_state (self->comp, 0) > OMX_StateIdle)
     gst_omx_component_set_state (self->comp, OMX_StateIdle);
@@ -738,7 +738,7 @@ gst_omx_camera_shutdown (GstOMXCamera * self)
 {
   OMX_STATETYPE state;
 
-  GST_DEBUG_OBJECT (self, "Shutting down OMX camera");
+  GST_DEBUG_OBJECT (self, "Shutting down omxcamera");
 
   state = gst_omx_component_get_state (self->comp, 0);
   if (state > OMX_StateLoaded || state == OMX_StateInvalid) {
@@ -768,7 +768,7 @@ gst_omx_camera_close (GstOMXCamera * self)
 {
   GstOMXCameraClass *klass = GST_OMX_CAMERA_GET_CLASS (self);
 
-  GST_DEBUG_OBJECT (self, "Closing OMX camera");
+  GST_DEBUG_OBJECT (self, "Closing omxcamera");
   if (!gst_omx_camera_shutdown (self))
     return FALSE;
 
