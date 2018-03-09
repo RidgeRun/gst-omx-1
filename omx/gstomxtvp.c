@@ -39,6 +39,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_omx_tvp_debug);
 #define GST_CAT_DEFAULT gst_omx_tvp_debug
 
+/* Properties enum */
 enum
 {
   PROP_0,
@@ -46,21 +47,49 @@ enum
   PROP_SCAN_TYPE,
 };
 
-static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
-    GST_PAD_SINK,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("ANY")
-    );
-
-static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
-    GST_PAD_SRC,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("ANY")
-    );
-
 #define GST_OMX_TVP_STANDARD_720  720
 #define GST_OMX_TVP_STANDARD_1080 1080
 #define PROP_STANDARD_DEFAULT     GST_OMX_TVP_STANDARD_1080
+#define PROP_SCAN_TYPE_DEFAULT    OMX_VIDEO_CaptureScanTypeProgressive
+
+/* Properties enum types */
+#define GST_OMX_TVP_STANDARD_TYPE (gst_omx_tvp_standard_type_get_type())
+static GType
+gst_omx_tvp_standard_type_get_type (void)
+{
+  static GType tvp_standard_type = 0;
+
+  static const GEnumValue tvp_standard_types[] = {
+    {720, "1280x720p resolution", "720p "},
+    {1080, "1920x1080p resolution", "1080p"},
+    {0, NULL, NULL}
+  };
+
+  if (!tvp_standard_type) {
+    tvp_standard_type =
+        g_enum_register_static ("GstOMXTvpStandard", tvp_standard_types);
+  }
+  return tvp_standard_type;
+}
+
+#define GST_OMX_TVP_SCAN_TYPE (gst_omx_tvp_scan_type_get_type())
+static GType
+gst_omx_tvp_scan_type_get_type (void)
+{
+  static GType scan_type_type = 0;
+
+  static const GEnumValue scan_type_types[] = {
+    {OMX_VIDEO_CaptureScanTypeProgressive, "Progressive", "progressive"},
+    {OMX_VIDEO_CaptureScanTypeInterlaced, "Interlaced ", "interlaced"},
+    {0, NULL, NULL}
+  };
+
+  if (!scan_type_type) {
+    scan_type_type =
+        g_enum_register_static ("GstOMXTvpScanType", scan_type_types);
+  }
+  return scan_type_type;
+}
 
 #define gst_omx_tvp_parent_class parent_class
 G_DEFINE_TYPE (GstOMXTvp, gst_omx_tvp, GST_TYPE_BASE_TRANSFORM);
@@ -89,28 +118,22 @@ gst_omx_tvp_class_init (GstOMXTvpClass * klass)
   gobject_class->set_property = gst_omx_tvp_set_property;
   gobject_class->get_property = gst_omx_tvp_get_property;
 
-  /* TODO: Use enums for property installation */
   g_object_class_install_property (gobject_class, PROP_STANDARD,
-      g_param_spec_uint ("standard", "Video standard",
+      g_param_spec_enum ("standard", "Video standard",
           "Video Standard to use: 1080 or 720",
-          GST_OMX_TVP_STANDARD_720, GST_OMX_TVP_STANDARD_1080,
-          PROP_STANDARD_DEFAULT, G_PARAM_READWRITE));
+          GST_OMX_TVP_STANDARD_TYPE, PROP_STANDARD_DEFAULT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_SCAN_TYPE,
-      g_param_spec_string ("scan-type", "Video scan type",
-          "Video scan type:"
-          "\n\t\t\t progressive "
-          "\n\t\t\t interlaced ", "progressive", G_PARAM_READWRITE));
+      g_param_spec_enum ("scan-type", "Scan Type",
+          "Video scan type",
+          GST_OMX_TVP_SCAN_TYPE, PROP_SCAN_TYPE_DEFAULT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   gst_element_class_set_details_simple (gstelement_class,
       "OpenMAX TVP Initializer", "Filter",
       "Initializes TVP hardware for video capture via component",
       "Jose Lopez <jose.lopez@ridgerun.com>");
-
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_template));
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_template));
 
   GST_BASE_TRANSFORM_CLASS (klass)->start =
       GST_DEBUG_FUNCPTR (gst_omx_tvp_start);
@@ -137,7 +160,7 @@ static void
 gst_omx_tvp_init (GstOMXTvp * self)
 {
   self->standard = PROP_STANDARD_DEFAULT;
-  self->scan_type = OMX_VIDEO_CaptureScanTypeProgressive;
+  self->scan_type = PROP_SCAN_TYPE_DEFAULT;
   self->mode_configured = FALSE;
 }
 
@@ -146,23 +169,13 @@ gst_omx_tvp_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
   GstOMXTvp *self = GST_OMX_TVP (object);
-  gchar *str_value;
 
   switch (prop_id) {
     case PROP_STANDARD:
-      self->standard = g_value_get_uint (value);
+      self->standard = g_value_get_enum (value);
       break;
     case PROP_SCAN_TYPE:
-      str_value = g_value_dup_string (value);
-      if (!strcmp (str_value, "progressive")) {
-        self->scan_type = OMX_VIDEO_CaptureScanTypeProgressive;
-      } else if (!strcmp (str_value, "interlaced")) {
-        self->scan_type = OMX_VIDEO_CaptureScanTypeInterlaced;
-      } else {
-        GST_WARNING_OBJECT (self, "%s unsupported", str_value);
-        g_return_if_fail (0);
-      }
-      g_free (str_value);
+      self->scan_type = g_value_get_enum (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -178,13 +191,10 @@ gst_omx_tvp_get_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_STANDARD:
-      g_value_set_uint (value, self->standard);
+      g_value_set_enum (value, self->standard);
       break;
     case PROP_SCAN_TYPE:
-      if (self->scan_type == OMX_VIDEO_CaptureScanTypeProgressive)
-        g_value_set_string (value, "progressive");
-      else
-        g_value_set_string (value, "interlaced");
+      g_value_set_enum (value, self->scan_type);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
