@@ -866,7 +866,6 @@ gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
     } else {
       GstBufferPoolAcquireParams params = { 0, };
       gint n = port->buffers->len;
-      GstMemory *mem;
       gint i;
 
       for (i = 0; i < n; i++) {
@@ -883,8 +882,6 @@ gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
         gst_omx_port_release_buffer (port, buf);
         goto invalid_buffer;
       }
-      mem = gst_buffer_get_memory (*outbuf, 0);
-      gst_memory_unref (mem);
     }
   } else {
     *outbuf = gst_buffer_new ();
