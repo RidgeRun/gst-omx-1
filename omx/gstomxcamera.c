@@ -887,9 +887,10 @@ gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
     *outbuf = gst_buffer_new ();
   }
 
-  GST_BUFFER_TIMESTAMP (*outbuf) =
+  GST_BUFFER_PTS (*outbuf) =
       gst_util_uint64_scale (buf->omx_buf->nTimeStamp, GST_SECOND,
       OMX_TICKS_PER_SECOND) * 1000;
+  GST_BUFFER_DTS (*outbuf) = GST_BUFFER_PTS (*outbuf);
 
   if (buf->omx_buf->nTickCount != 0)
     GST_BUFFER_DURATION (*outbuf) =
@@ -901,7 +902,7 @@ gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
   GST_DEBUG_OBJECT (self,
       "Got buffer from component: %p with timestamp %" GST_TIME_FORMAT
       " duration %" GST_TIME_FORMAT, outbuf,
-      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (*outbuf)),
+      GST_TIME_ARGS (GST_BUFFER_PTS (*outbuf)),
       GST_TIME_ARGS (GST_BUFFER_DURATION (*outbuf)));
   return GST_FLOW_OK;
 
@@ -1035,7 +1036,7 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   if (G_UNLIKELY (ret != GST_FLOW_OK))
     goto error;
 
-  timestamp = GST_BUFFER_TIMESTAMP (*buf);
+  timestamp = GST_BUFFER_PTS (*buf);
 
   if (!self->started) {
     self->running_time = abs_time - base_time;
@@ -1057,7 +1058,8 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   GST_DEBUG_OBJECT (self, "Adjusted timestamp %" GST_TIME_FORMAT,
       GST_TIME_ARGS (timestamp));
 
-  GST_BUFFER_TIMESTAMP (*buf) = timestamp;
+  GST_BUFFER_PTS (*buf) = timestamp;
+  GST_BUFFER_DTS (*buf) = GST_BUFFER_PTS (*buf);
 
   return ret;
 
