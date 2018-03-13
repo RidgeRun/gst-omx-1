@@ -36,6 +36,7 @@
 #include "gstomxvp8dec.h"
 #include "gstomxtheoradec.h"
 #include "gstomxwmvdec.h"
+#include "gstomxjpegenc.h"
 #include "gstomxmpeg4videoenc.h"
 #include "gstomxh264enc.h"
 #include "gstomxh263enc.h"
@@ -45,6 +46,8 @@
 #include "gstomxamrdec.h"
 #include "gstomxanalogaudiosink.h"
 #include "gstomxhdmiaudiosink.h"
+#include "gstomxcamera.h"
+#include "gstomxscaler.h"
 
 GST_DEBUG_CATEGORY (gstomx_debug);
 #define GST_CAT_DEFAULT gstomx_debug
@@ -384,6 +387,11 @@ gst_omx_component_handle_messages (GstOMXComponent * comp)
         buf->used = FALSE;
 
         g_queue_push_tail (&port->pending_buffers, buf);
+
+        if (buf->gst_buf) {
+          gst_buffer_unref (buf->gst_buf);
+          buf->gst_buf = NULL;
+        }
 
         break;
       }
@@ -1227,7 +1235,19 @@ gst_omx_port_update_port_definition (GstOMXPort * port,
     return err_get;
 }
 
-/* NOTE: Uses comp->lock and comp->messages_lock */
+/* Return 0 when OMX buffer pointers are equal */
+static gint
+gst_omx_port_compare_buffers (gconstpointer a, gconstpointer b)
+{
+  GstOMXBuffer *buf1 = (GstOMXBuffer *) a;
+  GstOMXBuffer *buf2 = (GstOMXBuffer *) b;
+
+  return buf1->omx_buf->pBuffer - buf2->omx_buf->pBuffer;
+}
+
+/* NOTE: Uses comp->lock and comp->messages_lock
+ * If *buf is not NULL the buffer containing the given omx pointer
+ * is going to be returned */
 GstOMXAcquireBufferReturn
 gst_omx_port_acquire_buffer (GstOMXPort * port, GstOMXBuffer ** buf)
 {
@@ -1240,8 +1260,6 @@ gst_omx_port_acquire_buffer (GstOMXPort * port, GstOMXBuffer ** buf)
   g_return_val_if_fail (port != NULL, GST_OMX_ACQUIRE_BUFFER_ERROR);
   g_return_val_if_fail (!port->tunneled, GST_OMX_ACQUIRE_BUFFER_ERROR);
   g_return_val_if_fail (buf != NULL, GST_OMX_ACQUIRE_BUFFER_ERROR);
-
-  *buf = NULL;
 
   comp = port->comp;
 
@@ -1370,7 +1388,25 @@ retry:
 
   GST_DEBUG_OBJECT (comp->parent, "%s port %u has pending buffers",
       comp->name, port->index);
-  _buf = g_queue_pop_head (&port->pending_buffers);
+  /* If *buf is not NULL, the pending buffer containing the given omx pointer
+   * is going to be provided */
+  if (*buf) {
+    GList *l;
+    l = g_queue_find_custom (&port->pending_buffers, *buf,
+        gst_omx_port_compare_buffers);
+    if (l == NULL) {
+      GST_WARNING_OBJECT (comp->parent,
+          "OMX buffer %p wasn't found on pending queue",
+          (*buf)->omx_buf->pBuffer);
+      goto done;
+    }
+    _buf = l->data;
+    if (!g_queue_remove (&port->pending_buffers, _buf))
+      GST_WARNING_OBJECT (comp->parent, "Can't remove buffer %p from queue",
+          _buf);
+  } else {
+    _buf = g_queue_pop_head (&port->pending_buffers);
+  }
   ret = GST_OMX_ACQUIRE_BUFFER_OK;
 
 done:
@@ -1425,6 +1461,10 @@ gst_omx_port_release_buffer (GstOMXPort * port, GstOMXBuffer * buf)
     GST_ERROR_OBJECT (comp->parent, "Component %s is in error state: %s "
         "(0x%08x)", comp->name, gst_omx_error_to_string (err), err);
     g_queue_push_tail (&port->pending_buffers, buf);
+    if (buf->gst_buf) {
+      gst_buffer_unref (buf->gst_buf);
+      buf->gst_buf = NULL;
+    }
     gst_omx_component_send_message (comp, NULL);
     goto done;
   }
@@ -1434,6 +1474,10 @@ gst_omx_port_release_buffer (GstOMXPort * port, GstOMXBuffer * buf)
         "%s port %u is flushing or disabled, not releasing " "buffer",
         comp->name, port->index);
     g_queue_push_tail (&port->pending_buffers, buf);
+    if (buf->gst_buf) {
+      gst_buffer_unref (buf->gst_buf);
+      buf->gst_buf = NULL;
+    }
     gst_omx_component_send_message (comp, NULL);
     goto done;
   }
@@ -1571,7 +1615,7 @@ done:
   gst_omx_port_update_port_definition (port, NULL);
 
   GST_DEBUG_OBJECT (comp->parent, "Set %s port %u to %sflushing: %s (0x%08x)",
-      comp->name, port->index, (flush ? "" : "not "),
+      comp->name, port->index, (port->flushing ? "" : "not "),
       gst_omx_error_to_string (err), err);
   gst_omx_component_handle_messages (comp);
   g_mutex_unlock (&comp->lock);
@@ -1642,7 +1686,7 @@ gst_omx_port_allocate_buffers_unlocked (GstOMXPort * port,
   g_return_val_if_fail (n == port->port_def.nBufferCountActual,
       OMX_ErrorBadParameter);
 
-  GST_INFO_OBJECT (comp->parent,
+  GST_DEBUG_OBJECT (comp->parent,
       "Allocating %d buffers of size %" G_GSIZE_FORMAT " for %s port %u", n,
       (size_t) port->port_def.nBufferSize, comp->name, (guint) port->index);
 
@@ -1656,6 +1700,7 @@ gst_omx_port_allocate_buffers_unlocked (GstOMXPort * port,
     buf = g_slice_new0 (GstOMXBuffer);
     buf->port = port;
     buf->used = FALSE;
+    buf->gst_buf = NULL;
     buf->settings_cookie = port->settings_cookie;
     g_ptr_array_add (port->buffers, buf);
 
@@ -1806,6 +1851,10 @@ gst_omx_port_deallocate_buffers_unlocked (GstOMXPort * port)
      */
     if (buf->omx_buf) {
       g_assert (buf == buf->omx_buf->pAppPrivate);
+      if (buf->gst_buf) {
+        gst_buffer_unref (buf->gst_buf);
+        buf->gst_buf = NULL;
+      }
       buf->omx_buf->pAppPrivate = NULL;
       GST_DEBUG_OBJECT (comp->parent, "%s: deallocating buffer %p (%p)",
           comp->name, buf, buf->omx_buf->pBuffer);
@@ -2276,9 +2325,10 @@ static const GGetTypeFunction types[] = {
   gst_omx_h264_enc_get_type, gst_omx_h263_enc_get_type,
   gst_omx_aac_enc_get_type, gst_omx_mjpeg_dec_get_type,
   gst_omx_aac_dec_get_type, gst_omx_mp3_dec_get_type,
-  gst_omx_amr_dec_get_type
+  gst_omx_amr_dec_get_type, gst_omx_jpeg_enc_get_type,
+  gst_omx_scaler_get_type, gst_omx_camera_get_type,
 #ifdef HAVE_VP8
-      , gst_omx_vp8_dec_get_type
+  , gst_omx_vp8_dec_get_type
 #endif
 #ifdef HAVE_THEORA
       , gst_omx_theora_dec_get_type
@@ -2297,6 +2347,9 @@ static const struct TypeOffest base_types[] = {
   {gst_omx_video_enc_get_type, G_STRUCT_OFFSET (GstOMXVideoEncClass, cdata)},
   {gst_omx_audio_dec_get_type, G_STRUCT_OFFSET (GstOMXAudioDecClass, cdata)},
   {gst_omx_audio_enc_get_type, G_STRUCT_OFFSET (GstOMXAudioEncClass, cdata)},
+  {gst_omx_video_filter_get_type, G_STRUCT_OFFSET (GstOMXVideoFilterClass,
+          cdata)},
+  {gst_omx_camera_get_type, G_STRUCT_OFFSET (GstOMXCameraClass, cdata)},
 };
 
 static GKeyFile *config = NULL;
@@ -2812,7 +2865,6 @@ plugin_init (GstPlugin * plugin)
     ret |= gst_element_register (plugin, elements[i], rank, subtype);
   }
   g_strfreev (elements);
-
 done:
   g_free (env_config_dir);
   g_free (config_dirs);

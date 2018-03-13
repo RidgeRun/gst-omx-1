@@ -32,8 +32,6 @@ GST_DEBUG_CATEGORY_STATIC (gst_omx_h264_dec_debug_category);
 /* prototypes */
 static gboolean gst_omx_h264_dec_is_format_change (GstOMXVideoDec * dec,
     GstOMXPort * port, GstVideoCodecState * state);
-static gboolean gst_omx_h264_dec_set_format (GstOMXVideoDec * dec,
-    GstOMXPort * port, GstVideoCodecState * state);
 
 enum
 {
@@ -57,7 +55,6 @@ gst_omx_h264_dec_class_init (GstOMXH264DecClass * klass)
 
   videodec_class->is_format_change =
       GST_DEBUG_FUNCPTR (gst_omx_h264_dec_is_format_change);
-  videodec_class->set_format = GST_DEBUG_FUNCPTR (gst_omx_h264_dec_set_format);
 
   videodec_class->cdata.default_sink_template_caps = "video/x-h264, "
       "parsed=(boolean) true, "
@@ -107,20 +104,5 @@ gst_omx_h264_dec_is_format_change (GstOMXVideoDec * dec,
       || g_strcmp0 (old_level, new_level) != 0) {
     return TRUE;
   }
-
   return FALSE;
-}
-
-static gboolean
-gst_omx_h264_dec_set_format (GstOMXVideoDec * dec, GstOMXPort * port,
-    GstVideoCodecState * state)
-{
-  gboolean ret;
-  OMX_PARAM_PORTDEFINITIONTYPE port_def;
-
-  gst_omx_port_get_port_definition (port, &port_def);
-  port_def.format.video.eCompressionFormat = OMX_VIDEO_CodingAVC;
-  ret = gst_omx_port_update_port_definition (port, &port_def) == OMX_ErrorNone;
-
-  return ret;
 }

@@ -49,8 +49,18 @@ struct _GstOMXH264Enc
 #ifdef USE_OMX_TARGET_RPI
   gboolean inline_sps_pps_headers;
 #endif
-  guint32 periodicty_idr;
-  guint32 interval_intraframes;
+
+  /* caps */
+  guint32 level;
+  guint32 profile;
+
+  /* properties */
+  guint32 i_period;
+  guint32 idr_period;
+  guint32 idr_count;
+  guint32 encoding_preset;
+  guint32 rate_control_preset;
+  gboolean force_idr;
 
   GList *headers;
 };

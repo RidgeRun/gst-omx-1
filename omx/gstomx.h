@@ -139,6 +139,10 @@ G_BEGIN_DECLS
  */
 #define GST_OMX_HACK_HEIGHT_MULTIPLE_16             G_GUINT64_CONSTANT (0x0000000000000200)
 
+/* Helper defs for TI DM81xx */
+#define GST_OMX_VIDEO_BUFFER_OFFSET 512
+#define GST_OMX_VIDEO_NV12_HEIGHT_PAD 72
+
 typedef struct _GstOMXCore GstOMXCore;
 typedef struct _GstOMXPort GstOMXPort;
 typedef enum _GstOMXPortDirection GstOMXPortDirection;
@@ -297,6 +301,11 @@ struct _GstOMXBuffer {
 
   /* TRUE if this is an EGLImage */
   gboolean eglimage;
+
+  /* GstBuffer containing a shared OMX buffer. Set it
+   * if this buffer should be unreferenced after the OMX
+   * component realeased it on Empty callback */
+   GstBuffer *gst_buf;
 };
 
 struct _GstOMXClassData {

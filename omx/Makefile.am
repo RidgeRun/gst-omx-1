@@ -19,6 +19,7 @@ libgstomx_la_SOURCES = \
 	gstomxaudiodec.c \
 	gstomxaudioenc.c \
 	gstomxmjpegdec.c \
+	gstomxjpegenc.c \
 	gstomxmpeg4videodec.c \
 	gstomxmpeg2videodec.c \
 	gstomxh264dec.c \
@@ -35,7 +36,11 @@ libgstomx_la_SOURCES = \
 	gstomxamrdec.c \
 	gstomxaudiosink.c \
 	gstomxanalogaudiosink.c \
-	gstomxhdmiaudiosink.c	
+	gstomxhdmiaudiosink.c \
+	gstomxcamera.c \
+	gstomxtvp.c \
+	gstomxvideofilter.c \
+	gstomxscaler.c
 
 noinst_HEADERS = \
 	gstomx.h \
@@ -46,6 +51,7 @@ noinst_HEADERS = \
 	gstomxaudiodec.h \
 	gstomxaudioenc.h \
 	gstomxmjpegdec.h \
+	gstomxjpegenc.h \
 	gstomxmpeg2videodec.h \
 	gstomxmpeg4videodec.h \
 	gstomxh264dec.h \
@@ -62,7 +68,11 @@ noinst_HEADERS = \
 	gstomxamrdec.h \
 	gstomxaudiosink.h \
 	gstomxanalogaudiosink.h \
-	gstomxhdmiaudiosink.h 	
+	gstomxhdmiaudiosink.h \
+	gstomxcamera.h \
+	gstomxtvp.h \
+	gstomxvideofilter.h \
+	gstomxscaler.h
 
 if !HAVE_EXTERNAL_OMX
 OMX_INCLUDEPATH = -I$(abs_srcdir)/openmax
@@ -70,6 +80,7 @@ endif
 
 libgstomx_la_CFLAGS = \
 	-DGST_USE_UNSTABLE_API=1 \
+	$(OMXCORE_CFLAGS) \
 	$(OMX_INCLUDEPATH) \
 	$(GST_GL_CFLAGS) \
 	$(GST_PLUGINS_BASE_CFLAGS) \
@@ -77,6 +88,7 @@ libgstomx_la_CFLAGS = \
 	$(GST_CFLAGS) \
 	$(GMODULE_NO_EXPORT_CFLAGS)
 libgstomx_la_LIBADD = \
+	$(OMXCORE_LIBS) \
 	$(GST_GL_LIBS) \
 	$(GST_PLUGINS_BASE_LIBS) \
 	-lgstaudio-@GST_API_VERSION@ \

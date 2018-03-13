@@ -56,7 +56,7 @@ struct _GstOMXVideoDec
   /* < protected > */
   GstOMXComponent *dec;
   GstOMXPort *dec_in_port, *dec_out_port;
-  
+
   GstBufferPool *in_port_pool, *out_port_pool;
 
   /* < private > */
@@ -73,6 +73,13 @@ struct _GstOMXVideoDec
   GCond drain_cond;
   /* TRUE if EOS buffers shouldn't be forwarded */
   gboolean draining;
+
+  /* Control inport and outport buffers */
+  guint output_buffers;
+  guint input_buffers;
+
+  /* TRUE if upstream is EOS */
+  gboolean eos;
 
   GstFlowReturn downstream_flow_ret;
 #ifdef USE_OMX_TARGET_RPI
