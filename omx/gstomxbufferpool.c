@@ -420,7 +420,8 @@ gst_omx_buffer_pool_alloc_buffer (GstBufferPool * bpool,
       case GST_VIDEO_FORMAT_NV12:
         stride[1] = pool->port->port_def.format.video.nStride;
         offset[1] =
-            stride[0] * (pool->port->port_def.format.video.nFrameHeight + 72);
+            stride[0] * (pool->port->port_def.format.video.nFrameHeight
+            + GST_OMX_VIDEO_NV12_HEIGHT_PAD);
       case GST_VIDEO_FORMAT_NV16:
         stride[1] = nstride;
         offset[1] = offset[0] + stride[0] * nslice;
@@ -501,24 +502,23 @@ gst_omx_buffer_pool_acquire_buffer (GstBufferPool * bpool,
   GstFlowReturn ret = GST_FLOW_OK;
   GstOMXBufferPool *pool = GST_OMX_BUFFER_POOL (bpool);
   gboolean acquired = FALSE;
-  GTimeVal wait_end;
+  gint64 end_time;
 
   if (!pool->component) {
     while (!acquired) {
       *buffer = gst_atomic_queue_pop (pool->queue);
       if (G_LIKELY (*buffer)) {
         ret = GST_FLOW_OK;
-        GST_ERROR_OBJECT (pool, "acquired buffer %p", *buffer);
+        GST_DEBUG_OBJECT (pool, "acquired buffer %p", *buffer);
         acquired = TRUE;
       } else {
-        g_get_current_time (&wait_end);
-        g_time_val_add (&wait_end, 10);
+        end_time = g_get_monotonic_time () + 10;
         ret = GST_FLOW_ERROR;
         GST_WARNING_OBJECT (pool, "no more buffers");
         /* Wait until a new buffer is released or timeout expired */
         g_mutex_lock (&(pool->acquired_mutex));
-        g_cond_timed_wait (&(pool->acquired_cond), &(pool->acquired_mutex),
-            &wait_end);
+        g_cond_wait_until (&(pool->acquired_cond), &(pool->acquired_mutex),
+            end_time);
         g_mutex_unlock (&(pool->acquired_mutex));
       }
     }
@@ -561,11 +561,8 @@ gst_omx_buffer_pool_release_buffer (GstBufferPool * bpool, GstBuffer * buffer)
   GstOMXBufferPool *pool = GST_OMX_BUFFER_POOL (bpool);
   OMX_ERRORTYPE err;
   GstOMXBuffer *omx_buf;
-  GstMapInfo info;
 
-  gst_buffer_map (buffer, &info, GST_MAP_READ);
-  GST_LOG_OBJECT (pool, "releasing buffer %p with data %p", buffer, info.data);
-  gst_buffer_unmap (buffer, &info);
+  GST_LOG_OBJECT (pool, "releasing buffer %" GST_PTR_FORMAT, buffer);
 
   if (!pool->component) {
     g_mutex_lock (&(pool->acquired_mutex));

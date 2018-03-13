@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 RidgerRun LLC
+ * Copyright (C) 2018 RidgerRun LLC
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -34,17 +34,14 @@ GST_DEBUG_CATEGORY_STATIC (gst_omx_scaler_debug_category);
 #define GST_CAT_DEFAULT gst_omx_scaler_debug_category
 
 /* prototypes */
-static void gst_omx_scaler_set_property (GObject * object, guint prop_id,
-    const GValue * value, GParamSpec * pspec);
-static void gst_omx_scaler_get_property (GObject * object, guint prop_id,
-    GValue * value, GParamSpec * pspec);
 static GstCaps *gst_omx_scaler_transform_caps (GstOMXVideoFilter * self,
     GstPadDirection direction, GstPad * srcpad, GstCaps * caps,
     GstCaps * filter);
 static gboolean gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter,
     GstCaps * incaps, GstVideoInfo * ininfo, GList * outcaps_list,
     GList * outinfo_list);
-
+static GstCaps *gst_omx_scaler_fixed_src_caps (GstOMXVideoFilter * self,
+    GstCaps * incaps, GstPad * srcpad);
 static GstCaps *gst_omx_scaler_fixate_caps (GstOMXVideoFilter * self,
     GstPad * srcpad, GstCaps * sinkcaps, GstCaps * srccaps);
 enum
@@ -69,13 +66,9 @@ G_DEFINE_TYPE_WITH_CODE (GstOMXScaler, gst_omx_scaler,
 static void
 gst_omx_scaler_class_init (GstOMXScalerClass * klass)
 {
-  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
   GstOMXVideoFilterClass *videofilter_class =
       GST_OMX_VIDEO_FILTER_CLASS (klass);
-
-  gobject_class->set_property = gst_omx_scaler_set_property;
-  gobject_class->get_property = gst_omx_scaler_get_property;
 
   videofilter_class->num_outputs = 1;
   videofilter_class->cdata.default_src_template_caps = "video/x-raw,"
@@ -83,15 +76,17 @@ gst_omx_scaler_class_init (GstOMXScalerClass * klass)
       "height=(int) [ 16, 1080 ], " "framerate = " GST_VIDEO_FPS_RANGE;
   videofilter_class->cdata.default_sink_template_caps =
       "video/x-raw, " "format=(string)NV12,  width=(int) [ 16, 1920 ], "
-      "height = (int) [ 16, 1080 ], framerate = " GST_VIDEO_FPS_RANGE;
-  videofilter_class->fixate_caps =
-      GST_DEBUG_FUNCPTR (gst_omx_scaler_fixate_caps);
+      "height = (int) [ 16, 1200 ], framerate = " GST_VIDEO_FPS_RANGE;
   videofilter_class->transform_caps =
       GST_DEBUG_FUNCPTR (gst_omx_scaler_transform_caps);
+  videofilter_class->fixate_caps =
+      GST_DEBUG_FUNCPTR (gst_omx_scaler_fixate_caps);
   videofilter_class->set_format = GST_DEBUG_FUNCPTR (gst_omx_scaler_set_format);
+  videofilter_class->fixed_src_caps =
+      GST_DEBUG_FUNCPTR (gst_omx_scaler_fixed_src_caps);
   gst_element_class_set_static_metadata (element_class,
       "OpenMAX Video Scaler",
-      "Filter/Encoder/Video",
+      "Filter/Scaler/Video",
       "Scale raw video streams",
       "Melissa Montero <melissa.montero@ridgerun.com>");
 }
@@ -99,29 +94,6 @@ gst_omx_scaler_class_init (GstOMXScalerClass * klass)
 static void
 gst_omx_scaler_init (GstOMXScaler * self)
 {
-
-}
-
-static void
-gst_omx_scaler_set_property (GObject * object, guint prop_id,
-    const GValue * value, GParamSpec * pspec)
-{
-  switch (prop_id) {
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-  }
-}
-
-static void
-gst_omx_scaler_get_property (GObject * object, guint prop_id, GValue * value,
-    GParamSpec * pspec)
-{
-  switch (prop_id) {
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-  }
 }
 
 static gboolean
@@ -145,7 +117,8 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (videofilter, "setting input resolution");
+  GST_DEBUG_OBJECT (videofilter, "Setting channel resolution fields");
+
   GST_OMX_INIT_STRUCT (&channel_resolution);
   channel_resolution.Frm0Width = GST_VIDEO_INFO_WIDTH (ininfo);
   channel_resolution.Frm0Height = GST_VIDEO_INFO_HEIGHT (ininfo);
@@ -155,10 +128,17 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
   channel_resolution.Frm1Pitch = 0;
   channel_resolution.FrmStartX = 0;
   channel_resolution.FrmStartY = 0;
-  channel_resolution.FrmCropWidth = 0;
-  channel_resolution.FrmCropHeight = 0;
+  channel_resolution.FrmCropWidth = GST_VIDEO_INFO_WIDTH (ininfo);
+  channel_resolution.FrmCropHeight = GST_VIDEO_INFO_HEIGHT (ininfo);
   channel_resolution.eDir = OMX_DirInput;
   channel_resolution.nChId = 0;
+
+  GST_DEBUG_OBJECT (videofilter,
+      "Setting input channel resolution with Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
+      (int) channel_resolution.Frm0Width, (int) channel_resolution.Frm0Height,
+      (int) channel_resolution.Frm0Pitch, (int) channel_resolution.FrmCropWidth,
+      (int) channel_resolution.FrmCropHeight);
+
   err = gst_omx_component_set_config (videofilter->comp,
       OMX_TI_IndexConfigVidChResolution, &channel_resolution);
   if (err != OMX_ErrorNone) {
@@ -168,7 +148,6 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (videofilter, "setting output resolution");
   GST_OMX_INIT_STRUCT (&channel_resolution);
   channel_resolution.Frm0Width =
       GST_VIDEO_INFO_WIDTH ((GstVideoInfo *) outinfo_list->data);
@@ -185,16 +164,23 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
   channel_resolution.FrmCropHeight = 0;
   channel_resolution.eDir = OMX_DirOutput;
   channel_resolution.nChId = 0;
+
+  GST_DEBUG_OBJECT (videofilter,
+      "Setting output channel resolution with Frm0Width %d Frm0Height %d Frm0Pitch %d FrmCropWidth %d FrmCropHeight %d",
+      (int) channel_resolution.Frm0Width, (int) channel_resolution.Frm0Height,
+      (int) channel_resolution.Frm0Pitch, (int) channel_resolution.FrmCropWidth,
+      (int) channel_resolution.FrmCropHeight);
+
   err = gst_omx_component_set_config (videofilter->comp,
       OMX_TI_IndexConfigVidChResolution, &channel_resolution);
   if (err != OMX_ErrorNone) {
     GST_ERROR_OBJECT (videofilter,
-        "failed to set output channel resolution: %s (0x%08x) ",
+        "Failed to set output channel resolution: %s (0x%08x) ",
         gst_omx_error_to_string (err), err);
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (videofilter, "disable algorithm bypass mode");
+  GST_DEBUG_OBJECT (videofilter, "Setting bypass mode algorithm");
   GST_OMX_INIT_STRUCT (&alg_enable);
   alg_enable.nPortIndex = 0;
   alg_enable.nChId = 0;
@@ -203,7 +189,7 @@ gst_omx_scaler_set_format (GstOMXVideoFilter * videofilter, GstCaps * incaps,
       OMX_TI_IndexConfigAlgEnable, &alg_enable);
   if (err != OMX_ErrorNone) {
     GST_ERROR_OBJECT (videofilter,
-        "failed to set disable algorithm bypass mode: %s (0x%08x) ",
+        "Failed to set algorithm bypass mode: %s (0x%08x) ",
         gst_omx_error_to_string (err), err);
     return FALSE;
   }
@@ -248,7 +234,8 @@ gst_omx_scaler_transform_caps (GstOMXVideoFilter * videofilter,
   GstStructure *structure;
   const GValue *value;
   GstCaps *retcaps;
-  guint width, height;
+  guint width = 0;
+  guint height = 0;
   guint min_width, min_height, max_width, max_height;
   gint n, i;
 
@@ -339,4 +326,25 @@ gst_omx_scaler_transform_caps (GstOMXVideoFilter * videofilter,
   GST_DEBUG_OBJECT (videofilter, "returning caps: %" GST_PTR_FORMAT, retcaps);
 
   return retcaps;
+}
+
+static GstCaps *
+gst_omx_scaler_fixed_src_caps (GstOMXVideoFilter * self,
+    GstCaps * incaps, GstPad * srcpad)
+{
+  GstCaps *srctempl;
+  GstPad *srcpeer;
+  GstCaps *peercaps;
+
+  srctempl = gst_pad_get_pad_template_caps (srcpad);
+  srcpeer = gst_pad_get_peer (srcpad);
+  peercaps = gst_pad_query_caps (srcpeer, srctempl);
+
+  if (srcpeer)
+    gst_object_unref (srcpeer);
+
+  if (srctempl)
+    gst_caps_unref (srctempl);
+
+  return gst_caps_fixate (peercaps);
 }

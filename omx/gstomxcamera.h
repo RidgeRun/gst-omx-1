@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 RidgerRun LLC
+ * Copyright (C) 2018 RidgerRun LLC
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -90,7 +90,6 @@ struct _GstOMXCamera
 struct _GstOMXCameraClass
 {
   GstPushSrcClass parent_class;
-
   GstOMXClassData cdata;
 };
 

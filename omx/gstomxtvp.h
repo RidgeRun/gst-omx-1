@@ -22,8 +22,8 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_OMXTVP_H__
-#define __GST_OMXTVP_H__
+#ifndef __GST_OMX_TVP_H__
+#define __GST_OMX_TVP_H__
 
 #include <gst/gst.h>
 #include <gst/base/gstbasetransform.h>
@@ -32,19 +32,19 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_OMXTVP \
-  (gst_omxtvp_get_type())
-#define GST_OMXTVP(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMXTVP,GstOMXTvp))
-#define GST_OMXTVP_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMXTVP,GstOMXTvpClass))
-#define GST_IS_OMXTVP(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMXTVP))
-#define GST_IS_OMXTVP_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMXTVP))
+#define GST_TYPE_OMX_TVP \
+  (gst_omx_tvp_get_type())
+#define GST_OMX_TVP(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OMX_TVP,GstOMXTvp))
+#define GST_OMX_TVP_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OMX_TVP,GstOMXTvpClass))
+#define GST_IS_OMX_TVP(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OMX_TVP))
+#define GST_IS_OMX_TVP_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OMX_TVP))
 
 #define GST_OMX_TVP_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_OMXTVP,GstOMXTvpClass))
+  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_OMX_TVP,GstOMXTvpClass))
 
 typedef struct _GstOMXTvp      GstOMXTvp;
 typedef struct _GstOMXTvpClass GstOMXTvpClass;
@@ -64,8 +64,8 @@ struct _GstOMXTvpClass
   GstOMXClassData cdata;
 };
 
-GType gst_omxtvp_get_type (void);
+GType gst_omx_tvp_get_type (void);
 
 G_END_DECLS
 
-#endif /* __GST_OMXTVP_H__ */
+#endif /* __GST_OMX_TVP_H__ */

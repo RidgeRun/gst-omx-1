@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 RidgerRun LLC
+ * Copyright (C) 2018 RidgerRun LLC
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -24,7 +24,6 @@
 #include <gst/base/gstbasetransform.h>
 
 G_BEGIN_DECLS
-/* #defines don't like whitespacey bits */
 #define GST_TYPE_RR_H264_PARSE \
   (gst_rr_h264_parse_get_type())
 #define GST_RR_H264_PARSE(obj) \
