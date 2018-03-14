@@ -1,6 +1,6 @@
 EXTRA_DIST = gstomx.conf
 
-if USE_OMX_TARGET_DM816X
+if USE_OMX_TARGET_DM81XX
 configdir = $(sysconfdir)/xdg
 config_DATA = gstomx.conf
 endif

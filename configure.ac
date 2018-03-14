@@ -221,7 +221,7 @@ AC_ARG_ENABLE(Bsymbolic,
                LDFLAGS="${SAVED_LDFLAGS}" LIBS="${SAVED_LIBS}"])
 
 AC_ARG_WITH([omx-target],
-        AS_HELP_STRING([--with-omx-target],[Use this OpenMAX IL target (generic, bellagio, rpi, dm816x)]),
+        AS_HELP_STRING([--with-omx-target],[Use this OpenMAX IL target (generic, bellagio, rpi, dm81xx)]),
         [ac_cv_omx_target="$withval"], [ac_cv_omx_target="none"])
 
 ac_cv_omx_target_struct_packing="none"
@@ -238,17 +238,17 @@ case "${ac_cv_omx_target}" in
   bellagio)
     AC_DEFINE(USE_OMX_TARGET_BELLAGIO, 1, [Use Bellagio OpenMAX IL target])
     ;;
-  dm816x)
-    AC_DEFINE(USE_OMX_TARGET_DM816X, 1, [Use DM816x OpenMAX IL target])
+  dm81xx)
+    AC_DEFINE(USE_OMX_TARGET_DM81XX, 1, [Use DM81xx OpenMAX IL target])
     ;;
   none|*)
-    AC_ERROR([invalid OpenMAX IL target, you must specify one of --with-omx-target={generic,rpi,bellagio,dm816x}])
+    AC_ERROR([invalid OpenMAX IL target, you must specify one of --with-omx-target={generic,rpi,bellagio,dm81xx}])
     ;;
 esac
 AM_CONDITIONAL(USE_OMX_TARGET_GENERIC, test "x$ac_cv_omx_target" = "xgeneric")
 AM_CONDITIONAL(USE_OMX_TARGET_BELLAGIO, test "x$ac_cv_omx_target" = "xbellagio")
 AM_CONDITIONAL(USE_OMX_TARGET_RPI, test "x$ac_cv_omx_target" = "xrpi")
-AM_CONDITIONAL(USE_OMX_TARGET_DM816X, test "x$ac_cv_omx_target" = "xdm816x")
+AM_CONDITIONAL(USE_OMX_TARGET_DM81XX, test "x$ac_cv_omx_target" = "xdm81xx")
 
 AC_ARG_WITH([omx-struct-packing],
         AS_HELP_STRING([--with-omx-struct-packing],[Force OpenMAX struct packing, (default is none)]),
@@ -319,7 +319,7 @@ dnl *** plug-ins to include ***
 
 dnl these are all the gst plug-ins, compilable without additional libs
 AG_GST_CHECK_PLUGIN(omx)
-AG_GST_CHECK_PLUGIN(h264parse)
+AG_GST_CHECK_PLUGIN(rrh264parse)
 
 dnl *** finalize CFLAGS, LDFLAGS, LIBS
 
@@ -360,7 +360,7 @@ AC_SUBST(GST_OMX_CFLAGS)
 
 dnl FIXME: do we want to rename to GST_ALL_* ?
 dnl add GST_OPTION_CFLAGS, but overridable
-GST_CFLAGS="$GLIB_CFLAGS $GST_CFLAGS $GLIB_EXTRA_CFLAGS \$(GST_OPTION_CFLAGS)"
+GST_CFLAGS="$GST_CFLAGS $GLIB_EXTRA_CFLAGS $(GST_OPTION_CFLAGS)"
 AC_SUBST(GST_CFLAGS)
 dnl add GCOV libs because libtool strips -fprofile-arcs -ftest-coverage
 GST_LIBS="$GST_LIBS \$(GCOV_LIBS)"
@@ -388,14 +388,14 @@ AC_CONFIG_FILES(
 Makefile
 omx/Makefile
 gst/Makefile
-gst/h264parse/Makefile
+gst/rrh264parse/Makefile
 common/Makefile
 common/m4/Makefile
 tools/Makefile
 config/Makefile
 config/bellagio/Makefile
 config/rpi/Makefile
-config/ti/Makefile
+config/dm81xx/Makefile
 examples/Makefile
 examples/egl/Makefile
 m4/Makefile

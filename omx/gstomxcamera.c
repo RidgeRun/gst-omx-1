@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 RidgerRun LLC
+ * Copyright (C) 2018 RidgerRun LLC
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -63,17 +63,6 @@ enum
 
 #define gst_omx_camera_parent_class parent_class
 G_DEFINE_TYPE (GstOMXCamera, gst_omx_camera, GST_TYPE_PUSH_SRC);
-/*
- * Caps:
- */
-static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
-    GST_PAD_SRC,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-raw, "
-        "format = (string) {YUY2, NV12}, "
-        "width = (int) [ 16, 3840 ], "
-        "height = (int) [ 16, 2160 ] , " "framerate = " GST_VIDEO_FPS_RANGE)
-    );
 
 #define MAX_SHIFTS	30
 /* Properties defaults */
@@ -171,10 +160,6 @@ static void gst_omx_camera_set_property (GObject * object, guint prop_id,
 static void gst_omx_camera_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-/* element methods */
-static GstStateChangeReturn gst_omx_camera_change_state (GstElement * element,
-    GstStateChange transition);
-
 /* basesrc methods */
 static gboolean gst_omx_camera_start (GstBaseSrc * src);
 static gboolean gst_omx_camera_stop (GstBaseSrc * src);
@@ -182,14 +167,17 @@ static gboolean gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps);
 
 static GstFlowReturn gst_omx_camera_create (GstPushSrc * src, GstBuffer ** out);
 static GstCaps *gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps);
-static gboolean gst_omx_camera_event (GstBaseSrc * src, GstEvent * event);
-static gboolean gst_omx_camera_negotiate (GstBaseSrc * basesrc);
 
 static gboolean gst_omx_camera_shutdown (GstOMXCamera * self);
 
-OMX_COLOR_FORMATTYPE gst_omx_camera_get_color_format (GstVideoFormat format);
-gint gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride,
+static OMX_COLOR_FORMATTYPE gst_omx_camera_get_color_format (GstVideoFormat
+    format);
+static gint gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride,
     gint height);
+
+/* class methods */
+static gboolean gst_omx_camera_open (GstOMXCamera * self);
+static gboolean gst_omx_camera_close (GstOMXCamera * self);
 
 static void
 gst_omx_camera_class_init (GstOMXCameraClass * klass)
@@ -241,30 +229,22 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
           "Skip this amount of frames after a vaild frame",
           0, 30, PROP_SKIP_FRAMES_DEFAULT, G_PARAM_READWRITE));
 
-  element_class->change_state = gst_omx_camera_change_state;
-
   gst_element_class_set_static_metadata (element_class,
       "OpenMAX Video Source", "Source/Video",
       "Reads frames from a camera device",
       "Melissa Montero <melissa.montero@uridgerun.com>");
 
-  gst_element_class_add_pad_template (element_class,
-      gst_static_pad_template_get (&src_template));
-
   basesrc_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
   basesrc_class->start = GST_DEBUG_FUNCPTR (gst_omx_camera_start);
   basesrc_class->stop = GST_DEBUG_FUNCPTR (gst_omx_camera_stop);
   basesrc_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
-  basesrc_class->event = GST_DEBUG_FUNCPTR (gst_omx_camera_event);
-  basesrc_class->negotiate = GST_DEBUG_FUNCPTR (gst_omx_camera_negotiate);
 
   pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_camera_create);
 
-  klass->cdata.component_name = "OMX.TI.VPSSM3.VFCC";
-  klass->cdata.core_name = "/usr/lib/libOMX_Core.so";
-  klass->cdata.in_port_index = -1;
-  klass->cdata.out_port_index = OMX_VFCC_OUTPUT_PORT_START_INDEX;
-  klass->cdata.hacks = GST_OMX_HACK_NO_COMPONENT_ROLE;
+  klass->cdata.type = GST_OMX_COMPONENT_TYPE_SOURCE;
+  klass->cdata.default_src_template_caps = "video/x-raw, "
+      "width = " GST_VIDEO_SIZE_RANGE ", " "format = (string) {YUY2, NV12}, "
+      "height = " GST_VIDEO_SIZE_RANGE ", " "framerate = " GST_VIDEO_FPS_RANGE;
 
   GST_DEBUG_CATEGORY_INIT (gst_omx_camera_debug, "omxcamera", 0,
       "OMX video source element");
@@ -428,6 +408,9 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
   GstStructure *structure;
   gint i;
 
+  g_return_val_if_fail (basesrc, NULL);
+  g_return_val_if_fail (caps, NULL);
+
   GST_DEBUG_OBJECT (basesrc, "fixating caps %" GST_PTR_FORMAT, caps);
 
   caps = gst_caps_make_writable (caps);
@@ -439,8 +422,7 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
        and the maximum framerate resolution for that size */
     gst_structure_fixate_field_nearest_int (structure, "width", 320);
     gst_structure_fixate_field_nearest_int (structure, "height", 240);
-    gst_structure_fixate_field_nearest_fraction (structure, "framerate",
-        G_MAXINT, 1);
+    gst_structure_fixate_field_nearest_fraction (structure, "framerate", 30, 1);
     gst_structure_fixate_field (structure, "format");
   }
 
@@ -451,138 +433,7 @@ gst_omx_camera_fixate (GstBaseSrc * basesrc, GstCaps * caps)
   return caps;
 }
 
-static gboolean
-gst_omx_camera_event (GstBaseSrc * src, GstEvent * event)
-{
-  GST_DEBUG_OBJECT (src, "handle event %" GST_PTR_FORMAT, event);
-
-  switch (GST_EVENT_TYPE (event)) {
-    case GST_EVENT_RECONFIGURE:
-      gst_pad_check_reconfigure (GST_BASE_SRC_PAD (src));
-      break;
-    default:
-      break;
-  }
-  return GST_BASE_SRC_CLASS (parent_class)->event (src, event);
-}
-
-
-static gboolean
-gst_omx_camera_negotiate (GstBaseSrc * basesrc)
-{
-  GstCaps *thiscaps = NULL;
-  GstCaps *caps = NULL;
-  GstCaps *peercaps = NULL;
-  gboolean result = FALSE;
-
-  GST_DEBUG_OBJECT (basesrc, "negotiate caps: %" GST_PTR_FORMAT, thiscaps);
-  /* first see what is possible on our source pad */
-  thiscaps = gst_pad_query_caps (GST_BASE_SRC_PAD (basesrc), NULL);
-  GST_DEBUG_OBJECT (basesrc, "caps of src: %" GST_PTR_FORMAT, thiscaps);
-
-  /* nothing or anything is allowed, we're done */
-  if (thiscaps == NULL || gst_caps_is_any (thiscaps))
-    goto no_nego_needed;
-
-  /* get the peer caps */
-  peercaps = gst_pad_peer_query_caps (GST_BASE_SRC_PAD (basesrc), thiscaps);
-  GST_DEBUG_OBJECT (basesrc, "caps of peer: %" GST_PTR_FORMAT, peercaps);
-  if (peercaps && !gst_caps_is_any (peercaps)) {
-    GstCaps *icaps = NULL;
-    int i;
-
-    /* Prefer the first caps we are compatible with that the peer proposed */
-    for (i = 0; i < gst_caps_get_size (peercaps); i++) {
-      /* get intersection */
-      GstCaps *ipcaps = gst_caps_copy_nth (peercaps, i);
-
-      GST_DEBUG_OBJECT (basesrc, "peer: %" GST_PTR_FORMAT, ipcaps);
-
-      icaps = gst_caps_intersect (thiscaps, ipcaps);
-      gst_caps_unref (ipcaps);
-
-      if (!gst_caps_is_empty (icaps))
-        break;
-
-      gst_caps_unref (icaps);
-      icaps = NULL;
-    }
-
-    GST_DEBUG_OBJECT (basesrc, "intersect: %" GST_PTR_FORMAT, icaps);
-    if (icaps) {
-      /* If there are multiple intersections pick the one with the smallest
-       * resolution strictly bigger than the first peer caps */
-      if (gst_caps_get_size (icaps) > 1) {
-        GstStructure *s = gst_caps_get_structure (peercaps, 0);
-        int best = 0;
-        int twidth, theight;
-        int width = G_MAXINT, height = G_MAXINT;
-
-        if (gst_structure_get_int (s, "width", &twidth)
-            && gst_structure_get_int (s, "height", &theight)) {
-
-          /* Walk the structure backwards to get the first entry of the
-           * smallest resolution bigger (or equal to) the preferred resolution)
-           */
-          for (i = gst_caps_get_size (icaps) - 1; i >= 0; i--) {
-            GstStructure *is = gst_caps_get_structure (icaps, i);
-            int w, h;
-
-            if (gst_structure_get_int (is, "width", &w)
-                && gst_structure_get_int (is, "height", &h)) {
-              if (w >= twidth && w <= width && h >= theight && h <= height) {
-                width = w;
-                height = h;
-                best = i;
-              }
-            }
-          }
-        }
-
-        caps = gst_caps_copy_nth (icaps, best);
-        gst_caps_unref (icaps);
-      } else {
-        caps = icaps;
-      }
-    }
-    gst_caps_unref (thiscaps);
-  } else {
-    /* no peer or peer have ANY caps, work with our own caps then */
-    caps = thiscaps;
-  }
-  if (peercaps)
-    gst_caps_unref (peercaps);
-  if (caps) {
-    caps = gst_caps_truncate (caps);
-
-    /* now fixate */
-    if (!gst_caps_is_empty (caps)) {
-      caps = gst_omx_camera_fixate (basesrc, caps);
-      GST_DEBUG_OBJECT (basesrc, "fixated to: %" GST_PTR_FORMAT, caps);
-
-      if (gst_caps_is_any (caps)) {
-        /* hmm, still anything, so element can do anything and
-         * nego is not needed */
-        result = TRUE;
-      } else if (gst_caps_is_fixed (caps)) {
-        /* yay, fixed caps, use those then */
-        result = gst_base_src_set_caps (basesrc, caps);
-      }
-    }
-    gst_caps_unref (caps);
-  }
-  return result;
-
-no_nego_needed:
-  {
-    GST_DEBUG_OBJECT (basesrc, "no negotiation needed");
-    if (thiscaps)
-      gst_caps_unref (thiscaps);
-    return TRUE;
-  }
-}
-
-OMX_COLOR_FORMATTYPE
+static OMX_COLOR_FORMATTYPE
 gst_omx_camera_get_color_format (GstVideoFormat format)
 {
   OMX_COLOR_FORMATTYPE omx_format;
@@ -604,7 +455,7 @@ gst_omx_camera_get_color_format (GstVideoFormat format)
   return omx_format;
 }
 
-gint
+static gint
 gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride, gint height)
 {
   gint buffer_size;
@@ -630,6 +481,8 @@ gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride, gint height)
 static gboolean
 gst_omx_camera_drain (GstOMXCamera * self)
 {
+  g_return_val_if_fail (self, FALSE);
+
   if (self->outport)
     gst_omx_port_set_flushing (self->outport, 5 * GST_SECOND, TRUE);
 
@@ -647,7 +500,6 @@ static gboolean
 gst_omx_camera_set_format (GstOMXCamera * self, GstCaps * caps,
     GstVideoInfo * info)
 {
-
   gboolean needs_disable = FALSE;
   OMX_PARAM_PORTDEFINITIONTYPE port_def;
   OMX_PARAM_BUFFER_MEMORYTYPE mem_type;
@@ -655,6 +507,10 @@ gst_omx_camera_set_format (GstOMXCamera * self, GstCaps * caps,
   OMX_PARAM_VFCC_HWPORT_ID hw_port;
   OMX_ERRORTYPE err;
   GstStructure *config;
+
+  g_return_val_if_fail (self, FALSE);
+  g_return_val_if_fail (caps, FALSE);
+  g_return_val_if_fail (info, FALSE);
 
   GST_DEBUG_OBJECT (self, "Setting new format");
 
@@ -773,9 +629,14 @@ config_pool_failed:
 static gboolean
 gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 {
-  GstOMXCamera *self = GST_OMX_CAMERA (src);
-  GstVideoInfo info;
+  GstOMXCamera * self = NULL;
   gchar *caps_str = NULL;
+  GstVideoInfo info;
+
+  g_return_val_if_fail (src, FALSE);
+  g_return_val_if_fail (caps, FALSE);
+
+  self = GST_OMX_CAMERA (src);
 
   GST_INFO_OBJECT (self, "set caps (%" GST_PTR_FORMAT "): %s", caps, caps_str =
       gst_caps_to_string (caps));
@@ -796,15 +657,24 @@ gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 static gboolean
 gst_omx_camera_start (GstBaseSrc * bsrc)
 {
+  g_return_val_if_fail (bsrc, FALSE);
+  GstOMXCamera *self = GST_OMX_CAMERA (bsrc);
+
+  GST_DEBUG_OBJECT (self, "Starting omxcamera");
+
+  if (!gst_omx_camera_open (self))
+    return FALSE;
+
   return TRUE;
 }
 
 static gboolean
 gst_omx_camera_stop (GstBaseSrc * bsrc)
 {
+  g_return_val_if_fail (bsrc, FALSE);
   GstOMXCamera *self = GST_OMX_CAMERA (bsrc);
 
-  GST_DEBUG_OBJECT (self, "Stopping element");
+  GST_DEBUG_OBJECT (self, "Stopping omxcamera");
 
   if (gst_omx_component_get_state (self->comp, 0) > OMX_StateIdle)
     gst_omx_component_set_state (self->comp, OMX_StateIdle);
@@ -814,15 +684,22 @@ gst_omx_camera_stop (GstBaseSrc * bsrc)
 
   gst_omx_component_get_state (self->comp, 5 * GST_SECOND);
 
+  if (!gst_omx_camera_close (self))
+    return FALSE;
+
   return TRUE;
 }
 
 static gboolean
 gst_omx_camera_open (GstOMXCamera * self)
 {
-  GstOMXCameraClass *klass = GST_OMX_CAMERA_GET_CLASS (self);
+  GstOMXCameraClass *klass = NULL;
   GstBufferPool *pool;
   gint port_index;
+
+  g_return_val_if_fail (self, FALSE);
+
+  klass = GST_OMX_CAMERA_GET_CLASS (self);
 
   self->started = FALSE;
   self->sharing = FALSE;
@@ -880,8 +757,9 @@ static gboolean
 gst_omx_camera_shutdown (GstOMXCamera * self)
 {
   OMX_STATETYPE state;
+  g_return_val_if_fail (self, FALSE);
 
-  GST_DEBUG_OBJECT (self, "Shutting down OMX camera");
+  GST_DEBUG_OBJECT (self, "Shutting down omxcamera");
 
   state = gst_omx_component_get_state (self->comp, 0);
   if (state > OMX_StateLoaded || state == OMX_StateInvalid) {
@@ -909,9 +787,10 @@ gst_omx_camera_shutdown (GstOMXCamera * self)
 static gboolean
 gst_omx_camera_close (GstOMXCamera * self)
 {
+  g_return_val_if_fail (self, FALSE);
   GstOMXCameraClass *klass = GST_OMX_CAMERA_GET_CLASS (self);
 
-  GST_DEBUG_OBJECT (self, "Closing OMX camera");
+  GST_DEBUG_OBJECT (self, "Closing omxcamera");
   if (!gst_omx_camera_shutdown (self))
     return FALSE;
 
@@ -931,48 +810,22 @@ gst_omx_camera_close (GstOMXCamera * self)
   return TRUE;
 }
 
-
-static GstStateChangeReturn
-gst_omx_camera_change_state (GstElement * element, GstStateChange transition)
-{
-  GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
-  GstOMXCamera *self = GST_OMX_CAMERA (element);
-
-  switch (transition) {
-    case GST_STATE_CHANGE_NULL_TO_READY:
-      /* open the component */
-      if (!gst_omx_camera_open (self))
-        return GST_STATE_CHANGE_FAILURE;
-      break;
-    default:
-      break;
-  }
-
-  ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
-
-  switch (transition) {
-    case GST_STATE_CHANGE_READY_TO_NULL:
-      /* close the component */
-      if (!gst_omx_camera_close (self))
-        return GST_STATE_CHANGE_FAILURE;
-
-      break;
-    default:
-      break;
-  }
-
-  return ret;
-}
-
 static GstFlowReturn
 gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
 {
-  GstOMXPort *port = self->outport;
-  GstOMXBuffer *buf = NULL;
-  GstOMXAcquireBufferReturn acq_return;
   OMX_ERRORTYPE err;
-  GstBufferPool *pool = self->outpool;
   GstFlowReturn flow_ret;
+  GstOMXAcquireBufferReturn acq_return;
+
+  GstOMXBuffer *buf = NULL;
+  GstOMXPort *port = NULL;
+  GstBufferPool *pool = NULL;
+
+  g_return_val_if_fail (self, GST_FLOW_ERROR);
+  g_return_val_if_fail (outbuf, GST_FLOW_ERROR);
+
+  port = self->outport;
+  pool = self->outpool;
 
   acq_return = gst_omx_port_acquire_buffer (port, &buf);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
@@ -1013,7 +866,6 @@ gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
     } else {
       GstBufferPoolAcquireParams params = { 0, };
       gint n = port->buffers->len;
-      GstMemory *mem;
       gint i;
 
       for (i = 0; i < n; i++) {
@@ -1030,16 +882,15 @@ gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
         gst_omx_port_release_buffer (port, buf);
         goto invalid_buffer;
       }
-      mem = gst_buffer_get_memory (*outbuf, 0);
-      gst_memory_unref (mem);
     }
   } else {
     *outbuf = gst_buffer_new ();
   }
 
-  GST_BUFFER_TIMESTAMP (*outbuf) =
+  GST_BUFFER_PTS (*outbuf) =
       gst_util_uint64_scale (buf->omx_buf->nTimeStamp, GST_SECOND,
       OMX_TICKS_PER_SECOND) * 1000;
+  GST_BUFFER_DTS (*outbuf) = GST_BUFFER_PTS (*outbuf);
 
   if (buf->omx_buf->nTickCount != 0)
     GST_BUFFER_DURATION (*outbuf) =
@@ -1051,7 +902,7 @@ gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
   GST_DEBUG_OBJECT (self,
       "Got buffer from component: %p with timestamp %" GST_TIME_FORMAT
       " duration %" GST_TIME_FORMAT, outbuf,
-      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (*outbuf)),
+      GST_TIME_ARGS (GST_BUFFER_PTS (*outbuf)),
       GST_TIME_ARGS (GST_BUFFER_DURATION (*outbuf)));
   return GST_FLOW_OK;
 
@@ -1092,6 +943,8 @@ release_error:
 static gboolean
 gst_omx_camera_component_init (GstOMXCamera * self, GList * buffers)
 {
+  g_return_val_if_fail (self, FALSE);
+
   GST_DEBUG_OBJECT (self, "Enabling buffers");
   if (gst_omx_port_set_enabled (self->outport, TRUE) != OMX_ErrorNone)
     return FALSE;
@@ -1149,10 +1002,15 @@ gst_omx_camera_component_init (GstOMXCamera * self, GList * buffers)
 static GstFlowReturn
 gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
 {
-  GstOMXCamera *self = GST_OMX_CAMERA (src);
-  GstFlowReturn ret;
   GstClock *clock;
+  GstFlowReturn ret;
   GstClockTime abs_time, base_time, timestamp;
+  GstOMXCamera *self = NULL;
+
+  g_return_val_if_fail (src, GST_FLOW_ERROR);
+  g_return_val_if_fail (buf, GST_FLOW_ERROR);
+
+  self = GST_OMX_CAMERA (src);
 
   /* timestamps, LOCK to get clock and base time. */
   GST_OBJECT_LOCK (self);
@@ -1178,7 +1036,7 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   if (G_UNLIKELY (ret != GST_FLOW_OK))
     goto error;
 
-  timestamp = GST_BUFFER_TIMESTAMP (*buf);
+  timestamp = GST_BUFFER_PTS (*buf);
 
   if (!self->started) {
     self->running_time = abs_time - base_time;
@@ -1200,7 +1058,8 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   GST_DEBUG_OBJECT (self, "Adjusted timestamp %" GST_TIME_FORMAT,
       GST_TIME_ARGS (timestamp));
 
-  GST_BUFFER_TIMESTAMP (*buf) = timestamp;
+  GST_BUFFER_PTS (*buf) = timestamp;
+  GST_BUFFER_DTS (*buf) = GST_BUFFER_PTS (*buf);
 
   return ret;
 
