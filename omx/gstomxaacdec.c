@@ -27,9 +27,6 @@
 GST_DEBUG_CATEGORY_STATIC (gst_omx_aac_dec_debug_category);
 #define GST_CAT_DEFAULT gst_omx_aac_dec_debug_category
 
-#define OMX_AACDEC_INPUT_PORT 0
-#define OMX_AACDEC_OUTPUT_PORT 1
-
 /* prototypes */
 static gboolean gst_omx_aac_dec_set_format (GstOMXAudioDec * dec,
     GstOMXPort * port, GstCaps * caps);
@@ -81,8 +78,7 @@ gst_omx_aac_dec_class_init (GstOMXAACDecClass * klass)
 static void
 gst_omx_aac_dec_init (GstOMXAACDec * self)
 {
-  /* NOTE: If necessary adjust to match TI aacdec setup */
-  self->spf = 1024;
+  self->spf = GST_OMX_AAC_DEC_OUTBUF_NSAMPLES;
 }
 
 static gboolean
@@ -99,12 +95,12 @@ gst_omx_aac_dec_set_format (GstOMXAudioDec * dec, GstOMXPort * port,
 
   gst_omx_port_get_port_definition (port, &port_def);
 
-  if (port->index == OMX_AACDEC_INPUT_PORT) {
+  if (port->index == GST_OMX_AAC_DEC_INPUT_PORT) {
     port_def.nPortIndex = port->index;
     port_def.eDir = OMX_DirInput;
     port_def.nBufferCountActual = 1;
     port_def.nBufferCountMin = 1;
-    port_def.nBufferSize = 4096;
+    port_def.nBufferSize = GST_OMX_AAC_DEC_INPUT_PORT_BUFFERSIZE;
     port_def.bEnabled = OMX_TRUE;
     port_def.bPopulated = OMX_FALSE;
     port_def.eDomain = OMX_PortDomainAudio;
@@ -116,12 +112,12 @@ gst_omx_aac_dec_set_format (GstOMXAudioDec * dec, GstOMXPort * port,
     port_def.format.audio.bFlagErrorConcealment = OMX_FALSE;
     GST_DEBUG_OBJECT (self, "Updating input port definition");
 
-  } else if (port->index == OMX_AACDEC_OUTPUT_PORT) {
+  } else if (port->index == GST_OMX_AAC_DEC_OUTPUT_PORT) {
     port_def.nPortIndex = port->index;
     port_def.eDir = OMX_DirOutput;
     port_def.nBufferCountActual = 1;
     port_def.nBufferCountMin = 1;
-    port_def.nBufferSize = 4608; // port_def.nBufferSize = 8192 // TI setup
+    port_def.nBufferSize = GST_OMX_AAC_DEC_OUTPUT_PORT_BUFFERSIZE;
     port_def.bEnabled = OMX_TRUE;
     port_def.bPopulated = OMX_FALSE;
     port_def.eDomain = OMX_PortDomainAudio;
@@ -143,7 +139,7 @@ gst_omx_aac_dec_set_format (GstOMXAudioDec * dec, GstOMXPort * port,
   }
 
   /* Set AAC params using sink pad caps */
-  if (port->index == OMX_AACDEC_INPUT_PORT && caps != NULL ) {
+  if (port->index == GST_OMX_AAC_DEC_INPUT_PORT && caps != NULL ) {
 
     GST_OMX_INIT_STRUCT (&aac_param);
     aac_param.nPortIndex = port->index;

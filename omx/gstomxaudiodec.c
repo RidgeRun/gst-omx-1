@@ -306,7 +306,6 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
 
   if (!gst_pad_has_current_caps (GST_AUDIO_DECODER_SRC_PAD (self)) ||
       acq_return == GST_OMX_ACQUIRE_BUFFER_RECONFIGURE) {
-    OMX_PARAM_PORTDEFINITIONTYPE port_def;
     OMX_AUDIO_PARAM_PCMMODETYPE pcm_param;
     GstAudioChannelPosition omx_position[OMX_AUDIO_MAXCHANNELS];
     GstOMXAudioDecClass *klass = GST_OMX_AUDIO_DEC_GET_CLASS (self);
@@ -415,8 +414,10 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
       gst_audio_get_channel_reorder_map (pcm_param.nChannels, self->position,
           omx_position, self->reorder_map);
 
-  GST_DEBUG_OBJECT (self, "PCM params: eNumData %d, eEndian %d, nBitPerSample %d",
-    pcm_param.eNumData, pcm_param.eEndian, pcm_param.nBitPerSample);
+    GST_DEBUG_OBJECT (self, "PCM params: eNumData %u,"
+        "eEndian %u, nBitPerSample %u",
+        (guint)pcm_param.eNumData, (guint)pcm_param.eEndian,
+        (guint)pcm_param.nBitPerSample);
 
     gst_audio_info_set_format (&self->info,
         gst_audio_format_build_integer (pcm_param.eNumData ==
@@ -789,8 +790,6 @@ gst_omx_audio_dec_set_format (GstAudioDecoder * decoder, GstCaps * caps)
 {
   GstOMXAudioDec *self;
   GstOMXAudioDecClass *klass;
-  GstStructure *s;
-  const GValue *codec_data;
   gboolean is_format_change = FALSE;
   gboolean needs_disable = FALSE;
 
@@ -977,7 +976,6 @@ gst_omx_audio_dec_set_format (GstAudioDecoder * decoder, GstCaps * caps)
 
   self->downstream_flow_ret = GST_FLOW_OK;
 
-  GST_DEBUG_OBJECT (self, "Decoder format set");
   return TRUE;
 }
 
