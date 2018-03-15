@@ -55,7 +55,6 @@ struct _GstOMXAudioDec
   /* < protected > */
   GstOMXComponent *dec;
   GstOMXPort *dec_in_port, *dec_out_port;
-  
   GstBufferPool *in_port_pool, *out_port_pool;
 
   /* < private > */
@@ -77,6 +76,7 @@ struct _GstOMXAudioDec
   gboolean draining;
 
   GstAdapter *output_adapter;
+  OMX_AUDIO_PARAM_PCMMODETYPE pcm_param;
 
   GstFlowReturn downstream_flow_ret;
 };

@@ -169,9 +169,10 @@ gst_omx_aac_dec_set_format (GstOMXAudioDec * dec, GstOMXPort * port,
       return FALSE;
     }
 
+    aac_param.eAACProfile = OMX_AUDIO_AACObjectLC;
     aac_param.nChannels = channels;
     aac_param.nSampleRate = rate;
-    aac_param.eAACProfile = OMX_AUDIO_AACObjectLC;
+    dec->pcm_param.nSamplingRate = rate;
 
     if (mpegversion == 2)
       aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatMP2ADTS;

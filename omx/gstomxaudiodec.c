@@ -306,7 +306,6 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
 
   if (!gst_pad_has_current_caps (GST_AUDIO_DECODER_SRC_PAD (self)) ||
       acq_return == GST_OMX_ACQUIRE_BUFFER_RECONFIGURE) {
-    OMX_AUDIO_PARAM_PCMMODETYPE pcm_param;
     GstAudioChannelPosition omx_position[OMX_AUDIO_MAXCHANNELS];
     GstOMXAudioDecClass *klass = GST_OMX_AUDIO_DEC_GET_CLASS (self);
     gint i;
@@ -336,27 +335,15 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
     /* Just update caps */
     GST_AUDIO_DECODER_STREAM_LOCK (self);
 
-    /* NOTE: PCM setup is not handled correctly by TI openmax IL,
-       for audio decoder output format will use hardcoded pcm values */
-    GST_OMX_INIT_STRUCT (&pcm_param);
-    pcm_param.nPortIndex = self->dec_out_port->index;
-    pcm_param.ePCMMode = OMX_AUDIO_PCMModeLinear;
-    pcm_param.bInterleaved = OMX_TRUE;
-    pcm_param.nChannels = 2;
-    pcm_param.eChannelMapping[0] = OMX_AUDIO_ChannelLF;
-    pcm_param.eChannelMapping[1] = OMX_AUDIO_ChannelRF;
-    pcm_param.eNumData = OMX_NumericalDataSigned;
-    pcm_param.eEndian = 1;
-    pcm_param.nBitPerSample = 16;
-    pcm_param.nSamplingRate = 44100;
-
-    g_assert (pcm_param.ePCMMode == OMX_AUDIO_PCMModeLinear);
-    g_assert (pcm_param.bInterleaved == OMX_TRUE);
+    /* Check pcm parameters before configuring decoder output */
+    g_assert (self->pcm_param.ePCMMode == OMX_AUDIO_PCMModeLinear);
+    g_assert (self->pcm_param.bInterleaved == OMX_TRUE);
+    g_assert (self->pcm_param.nSamplingRate != 0);
 
     gst_audio_info_init (&self->info);
 
-    for (i = 0; i < pcm_param.nChannels; i++) {
-      switch (pcm_param.eChannelMapping[i]) {
+    for (i = 0; i < self->pcm_param.nChannels; i++) {
+      switch (self->pcm_param.eChannelMapping[i]) {
         case OMX_AUDIO_ChannelLF:
           omx_position[i] = GST_AUDIO_CHANNEL_POSITION_FRONT_LEFT;
           break;
@@ -388,12 +375,12 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
         default:
           /* This will break the outer loop too as the
            * i == pcm_param.nChannels afterwards */
-          for (i = 0; i < pcm_param.nChannels; i++)
+          for (i = 0; i < self->pcm_param.nChannels; i++)
             omx_position[i] = GST_AUDIO_CHANNEL_POSITION_NONE;
           break;
       }
     }
-    if (pcm_param.nChannels == 1
+    if (self->pcm_param.nChannels == 1
         && omx_position[0] == GST_AUDIO_CHANNEL_POSITION_FRONT_CENTER)
       omx_position[0] = GST_AUDIO_CHANNEL_POSITION_MONO;
 
@@ -406,31 +393,33 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
 
     memcpy (self->position, omx_position, sizeof (omx_position));
     gst_audio_channel_positions_to_valid_order (self->position,
-        pcm_param.nChannels);
+        self->pcm_param.nChannels);
     self->needs_reorder =
         (memcmp (self->position, omx_position,
-            sizeof (GstAudioChannelPosition) * pcm_param.nChannels) != 0);
+            sizeof (GstAudioChannelPosition) * self->pcm_param.nChannels) != 0);
     if (self->needs_reorder)
-      gst_audio_get_channel_reorder_map (pcm_param.nChannels, self->position,
-          omx_position, self->reorder_map);
+      gst_audio_get_channel_reorder_map (self->pcm_param.nChannels,
+          self->position, omx_position, self->reorder_map);
 
     GST_DEBUG_OBJECT (self, "PCM params: eNumData %u,"
         "eEndian %u, nBitPerSample %u",
-        (guint)pcm_param.eNumData, (guint)pcm_param.eEndian,
-        (guint)pcm_param.nBitPerSample);
+        (guint)self->pcm_param.eNumData, (guint)self->pcm_param.eEndian,
+        (guint)self->pcm_param.nBitPerSample);
 
     gst_audio_info_set_format (&self->info,
-        gst_audio_format_build_integer (pcm_param.eNumData ==
+        gst_audio_format_build_integer (self->pcm_param.eNumData ==
             OMX_NumericalDataSigned,
-            pcm_param.eEndian ==
+            self->pcm_param.eEndian ==
             OMX_EndianLittle ? G_LITTLE_ENDIAN : G_BIG_ENDIAN,
-            pcm_param.nBitPerSample, pcm_param.nBitPerSample),
-        pcm_param.nSamplingRate, pcm_param.nChannels, self->position);
+            self->pcm_param.nBitPerSample, self->pcm_param.nBitPerSample),
+            self->pcm_param.nSamplingRate, self->pcm_param.nChannels,
+            self->position);
 
     GST_DEBUG_OBJECT (self,
         "Setting output state: format %s, rate %u, channels %u",
         gst_audio_format_to_string (self->info.finfo->format),
-        (guint) pcm_param.nSamplingRate, (guint) pcm_param.nChannels);
+        (guint) self->pcm_param.nSamplingRate,
+        (guint) self->pcm_param.nChannels);
 
     if (!gst_audio_decoder_set_output_format (GST_AUDIO_DECODER (self),
             &self->info)
@@ -860,6 +849,20 @@ gst_omx_audio_dec_set_format (GstAudioDecoder * decoder, GstCaps * caps)
 
     GST_DEBUG_OBJECT (self, "Decoder drained and disabled");
   }
+
+  /* Set up audiodec pcm parameters */
+  GST_OMX_INIT_STRUCT (&self->pcm_param);
+  self->pcm_param.nPortIndex = self->dec_out_port->index;
+  self->pcm_param.ePCMMode = OMX_AUDIO_PCMModeLinear;
+  self->pcm_param.bInterleaved = OMX_TRUE;
+  self->pcm_param.nChannels = 2;
+  self->pcm_param.eChannelMapping[0] = OMX_AUDIO_ChannelLF;
+  self->pcm_param.eChannelMapping[1] = OMX_AUDIO_ChannelRF;
+  self->pcm_param.eNumData = OMX_NumericalDataSigned;
+  self->pcm_param.eEndian = OMX_EndianLittle;
+  self->pcm_param.nBitPerSample = 16;
+  /* We get the sampling rate from caps */
+  self->pcm_param.nSamplingRate = 0;
 
   /* Call subclass set_format for input port configuration */
   if (klass->set_format) {
