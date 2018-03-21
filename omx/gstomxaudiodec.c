@@ -861,16 +861,13 @@ gst_omx_audio_dec_set_format (GstAudioDecoder * decoder, GstCaps * caps)
   /* We get the sampling rate from caps */
   self->pcm_param.nSamplingRate = 0;
 
-  /* Call subclass set_format for input port configuration */
+  /* Call subclass set_format for ports configuration */
   if (klass->set_format) {
     if (!klass->set_format (self, self->dec_in_port, caps)) {
       GST_ERROR_OBJECT (self, "Subclass failed to set the new input format");
       return FALSE;
     }
-  }
 
-  /* Call subclass set_format for output port configuration */
-  if (klass->set_format) {
     if (!klass->set_format (self, self->dec_out_port, NULL)) {
       GST_ERROR_OBJECT (self, "Subclass failed to set the new output format");
       return FALSE;
