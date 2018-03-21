@@ -58,7 +58,8 @@ enum
   PROP_CAPT_MODE,
   PROP_VIP_MODE,
   PROP_SCAN_TYPE,
-  PROP_SKIP_FRAMES
+  PROP_SKIP_FRAMES,
+  PROP_PROVIDE_CLOCK
 };
 
 #define gst_omx_camera_parent_class parent_class
@@ -73,6 +74,7 @@ G_DEFINE_TYPE (GstOMXCamera, gst_omx_camera, GST_TYPE_PUSH_SRC);
 #define PROP_VIP_MODE_DEFAULT             OMX_VIDEO_CaptureVifMode_16BIT
 #define PROP_SCAN_TYPE_DEFAULT            OMX_VIDEO_CaptureScanTypeProgressive
 #define PROP_SKIP_FRAMES_DEFAULT          0
+#define PROP_PROVIDE_CLOCK_DEFAULT        FALSE
 
 /* Properties enumerates */
 #define GST_OMX_CAMERA_INTERFACE_TYPE (gst_omx_camera_interface_get_type())
@@ -159,6 +161,7 @@ static void gst_omx_camera_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_omx_camera_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
+static void gst_omx_camera_dispose (GObject * object);
 
 /* basesrc methods */
 static gboolean gst_omx_camera_start (GstBaseSrc * src);
@@ -178,6 +181,10 @@ static gint gst_omx_camera_get_buffer_size (GstVideoFormat format, gint stride,
 /* class methods */
 static gboolean gst_omx_camera_open (GstOMXCamera * self);
 static gboolean gst_omx_camera_close (GstOMXCamera * self);
+static GstClock *gst_omx_camera_provide_clock (GstElement * element);
+static void gst_omx_camera_get_times (GstBaseSrc * src, GstBuffer * buffer,
+    GstClockTime * start, GstClockTime * end);
+
 
 static void
 gst_omx_camera_class_init (GstOMXCameraClass * klass)
@@ -189,6 +196,7 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
 
   gobject_class->set_property = gst_omx_camera_set_property;
   gobject_class->get_property = gst_omx_camera_get_property;
+  gobject_class->dispose = gst_omx_camera_dispose;
 
   g_object_class_install_property (gobject_class, PROP_NUM_OUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
@@ -229,15 +237,24 @@ gst_omx_camera_class_init (GstOMXCameraClass * klass)
           "Skip this amount of frames after a vaild frame",
           0, 30, PROP_SKIP_FRAMES_DEFAULT, G_PARAM_READWRITE));
 
+  g_object_class_install_property (gobject_class, PROP_PROVIDE_CLOCK,
+      g_param_spec_boolean ("provide-clock", "Provide Clock",
+          "Make OMX Camera provide clock to the pipeline",
+          PROP_PROVIDE_CLOCK_DEFAULT, G_PARAM_READWRITE));
+
   gst_element_class_set_static_metadata (element_class,
       "OpenMAX Video Source", "Source/Video",
       "Reads frames from a camera device",
       "Melissa Montero <melissa.montero@uridgerun.com>");
 
+  element_class->provide_clock =
+      GST_DEBUG_FUNCPTR (gst_omx_camera_provide_clock);
+
   basesrc_class->set_caps = GST_DEBUG_FUNCPTR (gst_omx_camera_set_caps);
   basesrc_class->start = GST_DEBUG_FUNCPTR (gst_omx_camera_start);
   basesrc_class->stop = GST_DEBUG_FUNCPTR (gst_omx_camera_stop);
   basesrc_class->fixate = GST_DEBUG_FUNCPTR (gst_omx_camera_fixate);
+  basesrc_class->get_times = GST_DEBUG_FUNCPTR (gst_omx_camera_get_times);
 
   pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_omx_camera_create);
 
@@ -268,6 +285,15 @@ gst_omx_camera_init (GstOMXCamera * self)
   self->always_copy = PROP_ALWAYS_COPY_DEFAULT;
   self->num_buffers = PROP_NUM_OUT_BUFFERS_DEFAULT;
   self->skip_frames = PROP_SKIP_FRAMES_DEFAULT;
+  self->provide_clock = PROP_PROVIDE_CLOCK_DEFAULT;
+  if (PROP_PROVIDE_CLOCK_DEFAULT)
+    GST_OBJECT_FLAG_SET (self, GST_ELEMENT_FLAG_PROVIDE_CLOCK);
+  else
+    GST_OBJECT_FLAG_UNSET (self, GST_ELEMENT_FLAG_PROVIDE_CLOCK);
+
+  self->clock =
+      g_object_new (GST_TYPE_OMX_CLOCK, "name", "GstOmxCameraClock", NULL);
+  g_object_set (self->clock, "clock-type", GST_CLOCK_TYPE_OTHER, NULL);
 }
 
 static void
@@ -341,6 +367,15 @@ gst_omx_camera_set_property (GObject * object,
       if (self->comp)
         gst_omx_camera_set_skip_frames (self);
       break;
+    case PROP_PROVIDE_CLOCK:
+      self->provide_clock = g_value_get_boolean (value);
+      GST_OBJECT_LOCK (self);
+      if (self->provide_clock)
+        GST_OBJECT_FLAG_SET (self, GST_ELEMENT_FLAG_PROVIDE_CLOCK);
+      else
+        GST_OBJECT_FLAG_UNSET (self, GST_ELEMENT_FLAG_PROVIDE_CLOCK);
+      GST_OBJECT_UNLOCK (self);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -392,6 +427,9 @@ gst_omx_camera_get_property (GObject * object,
       }
       break;
     }
+    case PROP_PROVIDE_CLOCK:
+      g_value_set_boolean (value, self->provide_clock);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -629,7 +667,7 @@ config_pool_failed:
 static gboolean
 gst_omx_camera_set_caps (GstBaseSrc * src, GstCaps * caps)
 {
-  GstOMXCamera * self = NULL;
+  GstOMXCamera *self = NULL;
   gchar *caps_str = NULL;
   GstVideoInfo info;
 
@@ -662,6 +700,10 @@ gst_omx_camera_start (GstBaseSrc * bsrc)
 
   GST_DEBUG_OBJECT (self, "Starting omxcamera");
 
+  if (self->provide_clock)
+    gst_element_post_message (GST_ELEMENT (self),
+        gst_message_new_clock_provide (GST_OBJECT_CAST (self),
+            GST_CLOCK (self->clock), TRUE));
   if (!gst_omx_camera_open (self))
     return FALSE;
 
@@ -805,6 +847,8 @@ gst_omx_camera_close (GstOMXCamera * self)
     self->comp = NULL;
     self->outport = NULL;
   }
+
+  gst_omx_clock_reset (self->clock);
 
   GST_INFO_OBJECT (self, "Closed component %s", klass->cdata.component_name);
   return TRUE;
@@ -1004,7 +1048,7 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
 {
   GstClock *clock;
   GstFlowReturn ret;
-  GstClockTime abs_time, base_time, timestamp;
+  GstClockTime abs_time = 0, base_time = 0, timestamp;
   GstOMXCamera *self = NULL;
 
   g_return_val_if_fail (src, GST_FLOW_ERROR);
@@ -1012,23 +1056,28 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
 
   self = GST_OMX_CAMERA (src);
 
-  /* timestamps, LOCK to get clock and base time. */
-  GST_OBJECT_LOCK (self);
-  if ((clock = GST_ELEMENT_CLOCK (self))) {
-    /* we have a clock, get base time and ref clock */
-    base_time = GST_ELEMENT (self)->base_time;
-    abs_time = gst_clock_get_time (clock);
-  } else {
-    /* no clock, can't set timestamps */
-    base_time = GST_CLOCK_TIME_NONE;
-    abs_time = GST_CLOCK_TIME_NONE;
+  if (!self->provide_clock) {
+    /* timestamps, LOCK to get clock and base time. */
+    GST_OBJECT_LOCK (self);
+    if ((clock = GST_ELEMENT_CLOCK (self))) {
+      /* we have a clock, get base time and ref clock */
+      base_time = GST_ELEMENT (self)->base_time;
+      abs_time = gst_clock_get_time (clock);
+    } else {
+      /* no clock, can't set timestamps */
+      base_time = GST_CLOCK_TIME_NONE;
+      abs_time = GST_CLOCK_TIME_NONE;
+    }
+    GST_OBJECT_UNLOCK (self);
   }
-  GST_OBJECT_UNLOCK (self);
 
   if (!self->started) {
     if (!gst_omx_camera_component_init (self, NULL)) {
       ret = GST_FLOW_ERROR;
       goto error;
+    } else {
+      if (self->provide_clock)
+        self->started = TRUE;
     }
   }
 
@@ -1036,30 +1085,35 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   if (G_UNLIKELY (ret != GST_FLOW_OK))
     goto error;
 
-  timestamp = GST_BUFFER_PTS (*buf);
+  /* Refresh the OMX clock */
+  gst_omx_clock_new_tick (self->clock, GST_BUFFER_PTS (*buf));
 
-  if (!self->started) {
-    self->running_time = abs_time - base_time;
-    if (!self->running_time)
-      self->running_time = timestamp;
-    self->omx_delay = timestamp - self->running_time;
+  if (!self->provide_clock) {
+    timestamp = GST_BUFFER_PTS (*buf);
 
-    GST_DEBUG_OBJECT (self, "OMX delay %" G_GINT64_FORMAT, self->omx_delay);
-    self->started = TRUE;
+    if (!self->started) {
+      self->running_time = abs_time - base_time;
+      if (!self->running_time)
+        self->running_time = timestamp;
+      self->omx_delay = timestamp - self->running_time;
+
+      GST_DEBUG_OBJECT (self, "OMX delay %" G_GINT64_FORMAT, self->omx_delay);
+      self->started = TRUE;
+    }
+
+    /* set buffer metadata */
+    GST_BUFFER_OFFSET (*buf) = self->offset++;
+    GST_BUFFER_OFFSET_END (*buf) = self->offset;
+
+    /* the time now is the time of the clock minus the base time */
+    timestamp = timestamp - self->omx_delay;
+
+    GST_DEBUG_OBJECT (self, "Adjusted timestamp %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (timestamp));
+
+    GST_BUFFER_PTS (*buf) = timestamp;
+    GST_BUFFER_DTS (*buf) = GST_BUFFER_PTS (*buf);
   }
-
-  /* set buffer metadata */
-  GST_BUFFER_OFFSET (*buf) = self->offset++;
-  GST_BUFFER_OFFSET_END (*buf) = self->offset;
-
-  /* the time now is the time of the clock minus the base time */
-  timestamp = timestamp - self->omx_delay;
-
-  GST_DEBUG_OBJECT (self, "Adjusted timestamp %" GST_TIME_FORMAT,
-      GST_TIME_ARGS (timestamp));
-
-  GST_BUFFER_PTS (*buf) = timestamp;
-  GST_BUFFER_DTS (*buf) = GST_BUFFER_PTS (*buf);
 
   return ret;
 
@@ -1069,5 +1123,51 @@ error:
     GST_ERROR_OBJECT (self, "error processing buffer %d (%s)", ret,
         gst_flow_get_name (ret));
     return ret;
+  }
+}
+
+static GstClock *
+gst_omx_camera_provide_clock (GstElement * element)
+{
+  GstOMXCamera *self = GST_OMX_CAMERA (element);
+  GstClock *clock;
+
+  g_return_val_if_fail (GST_IS_OMX_CLOCK (self->clock), NULL);
+
+  GST_OBJECT_LOCK (self);
+  if (!self->provide_clock)
+    goto clock_disabled;
+
+  clock = GST_CLOCK_CAST (gst_object_ref (self->clock));
+
+  GST_OBJECT_UNLOCK (self);
+
+
+  return clock;
+
+clock_disabled:
+  {
+    GST_DEBUG_OBJECT (self, "clock provide disabled");
+    GST_OBJECT_UNLOCK (self);
+    return NULL;
+  }
+}
+
+static void
+gst_omx_camera_get_times (GstBaseSrc * src, GstBuffer * buffer,
+    GstClockTime * start, GstClockTime * end)
+{
+  *start = GST_BUFFER_PTS (buffer);
+  end = start + GST_BUFFER_DURATION (buffer);
+}
+
+static void
+gst_omx_camera_dispose (GObject * object)
+{
+  GstOMXCamera *self = GST_OMX_CAMERA (object);
+
+  if (self->clock) {
+    g_object_unref (self->clock);
+    self->clock = NULL;
   }
 }
