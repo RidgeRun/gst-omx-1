@@ -373,10 +373,7 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
           break;
         case OMX_AUDIO_ChannelNone:
         default:
-          /* This will break the outer loop too as the
-           * i == pcm_param.nChannels afterwards */
-          for (i = 0; i < self->pcm_param.nChannels; i++)
-            omx_position[i] = GST_AUDIO_CHANNEL_POSITION_NONE;
+          omx_position[i] = GST_AUDIO_CHANNEL_POSITION_NONE;
           break;
       }
     }
