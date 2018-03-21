@@ -95,37 +95,28 @@ gst_omx_aac_dec_set_format (GstOMXAudioDec * dec, GstOMXPort * port,
 
   gst_omx_port_get_port_definition (port, &port_def);
 
-  if (port->index == GST_OMX_AAC_DEC_INPUT_PORT) {
-    port_def.nPortIndex = port->index;
+  port_def.nPortIndex = port->index;
+  port_def.nBufferCountActual = 1;
+  port_def.nBufferCountMin = 1;
+  port_def.bEnabled = OMX_TRUE;
+  port_def.bPopulated = OMX_FALSE;
+  port_def.eDomain = OMX_PortDomainAudio;
+  port_def.bBuffersContiguous = OMX_FALSE;
+  port_def.nBufferAlignment = 32;
+  port_def.format.audio.pNativeRender = NULL;
+  port_def.format.audio.bFlagErrorConcealment = OMX_FALSE;
+
+  if (port_def.nPortIndex == GST_OMX_AAC_DEC_INPUT_PORT) {
     port_def.eDir = OMX_DirInput;
-    port_def.nBufferCountActual = 1;
-    port_def.nBufferCountMin = 1;
     port_def.nBufferSize = GST_OMX_AAC_DEC_INPUT_PORT_BUFFERSIZE;
-    port_def.bEnabled = OMX_TRUE;
-    port_def.bPopulated = OMX_FALSE;
-    port_def.eDomain = OMX_PortDomainAudio;
-    port_def.bBuffersContiguous = OMX_FALSE;
-    port_def.nBufferAlignment = 32;
     port_def.format.audio.cMIMEType = (OMX_STRING)"ADEC";
-    port_def.format.audio.pNativeRender = NULL;
     port_def.format.audio.eEncoding = OMX_AUDIO_CodingAAC;
-    port_def.format.audio.bFlagErrorConcealment = OMX_FALSE;
     GST_DEBUG_OBJECT (self, "Updating input port definition");
 
-  } else if (port->index == GST_OMX_AAC_DEC_OUTPUT_PORT) {
-    port_def.nPortIndex = port->index;
+  } else if (port_def.nPortIndex == GST_OMX_AAC_DEC_OUTPUT_PORT) {
     port_def.eDir = OMX_DirOutput;
-    port_def.nBufferCountActual = 1;
-    port_def.nBufferCountMin = 1;
     port_def.nBufferSize = GST_OMX_AAC_DEC_OUTPUT_PORT_BUFFERSIZE;
-    port_def.bEnabled = OMX_TRUE;
-    port_def.bPopulated = OMX_FALSE;
-    port_def.eDomain = OMX_PortDomainAudio;
-    port_def.bBuffersContiguous = OMX_FALSE;
-    port_def.nBufferAlignment = 32;
     port_def.format.audio.cMIMEType = (OMX_STRING)"PCM";
-    port_def.format.audio.pNativeRender = NULL;
-    port_def.format.audio.bFlagErrorConcealment = OMX_FALSE;
     port_def.format.audio.eEncoding = OMX_AUDIO_CodingUnused;
     GST_DEBUG_OBJECT (self, "Updating output port definition");
   }
