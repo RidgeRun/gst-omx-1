@@ -169,8 +169,6 @@ gst_omx_aac_dec_set_format (GstOMXAudioDec * dec, GstOMXPort * port,
       aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatMP2ADTS;
     else if (strcmp (stream_format, "adts") == 0)
       aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatMP4ADTS;
-    else if (strcmp (stream_format, "loas") == 0)
-      aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatMP4LOAS;
     else if (strcmp (stream_format, "adif") == 0)
       aac_param.eAACStreamFormat = OMX_AUDIO_AACStreamFormatADIF;
     else if (strcmp (stream_format, "raw") == 0)
