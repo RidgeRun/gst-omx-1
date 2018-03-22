@@ -326,10 +326,10 @@ gst_omx_aac_enc_set_format (GstOMXAudioEnc * enc, GstOMXPort * port,
   } else {
     GST_DEBUG_OBJECT (self,
         "Audio AAC parameters: eAACProfile=%d (OMX_AUDIO_AACObjectLC=%d), eAACStreamFormat=%d (OMX_AUDIO_AACStreamFormatMP4ADTS=%d), nSampleRate=%d, nChannels=%d, nBitRate=%d",
-        (int) aac_profile.eAACProfile, (int) OMX_AUDIO_AACObjectLC,
-        (int) aac_profile.eAACStreamFormat,
-        (int) OMX_AUDIO_AACStreamFormatMP4ADTS, (int) aac_profile.nSampleRate,
-        (int) aac_profile.nChannels, (int) aac_profile.nBitRate);
+        (gint) aac_profile.eAACProfile, (gint) OMX_AUDIO_AACObjectLC,
+        (gint) aac_profile.eAACStreamFormat,
+        (gint) OMX_AUDIO_AACStreamFormatMP4ADTS, (gint) aac_profile.nSampleRate,
+        (gint) aac_profile.nChannels, (gint) aac_profile.nBitRate);
   }
   return TRUE;
 }
