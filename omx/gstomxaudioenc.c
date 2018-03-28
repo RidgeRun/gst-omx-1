@@ -233,6 +233,9 @@ gst_omx_audio_enc_change_state (GstElement * element, GstStateChange transition)
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
+      /* DSP does not support flush ports */
+      self->enc_out_port->flushing = TRUE;
+      self->enc_in_port->flushing = TRUE;
       g_mutex_lock (&self->drain_lock);
       self->draining = FALSE;
       g_cond_broadcast (&self->drain_cond);
