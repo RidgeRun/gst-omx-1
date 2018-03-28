@@ -868,7 +868,7 @@ gst_omx_audio_dec_set_format (GstAudioDecoder * decoder, GstCaps * caps)
       return FALSE;
     }
 
-    if (!klass->set_format (self, self->dec_out_port, NULL)) {
+    if (!klass->set_format (self, self->dec_out_port, caps)) {
       GST_ERROR_OBJECT (self, "Subclass failed to set the new output format");
       return FALSE;
     }
