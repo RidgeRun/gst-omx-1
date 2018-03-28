@@ -142,6 +142,9 @@ G_BEGIN_DECLS
 /* Helper defs for TI DM81xx */
 #define GST_OMX_VIDEO_BUFFER_OFFSET 512
 #define GST_OMX_VIDEO_NV12_HEIGHT_PAD 72
+#define GST_OMX_AUDIO_ENC_INBUF_SIZE 4096
+#define GST_OMX_AUDIO_ENC_OUTBUF_SIZE 4608
+#define GST_OMX_AAC_ENC_INBUF_NSAMPLES 1024
 
 typedef struct _GstOMXCore GstOMXCore;
 typedef struct _GstOMXPort GstOMXPort;
