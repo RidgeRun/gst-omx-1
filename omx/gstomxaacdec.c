@@ -78,7 +78,7 @@ gst_omx_aac_dec_class_init (GstOMXAACDecClass * klass)
 static void
 gst_omx_aac_dec_init (GstOMXAACDec * self)
 {
-  g_return_val_if_fail (self, NULL);
+  g_return_if_fail (self);
   self->spf = GST_OMX_AAC_DEC_OUTBUF_NSAMPLES;
 }
 
@@ -94,9 +94,9 @@ gst_omx_aac_dec_set_format (GstOMXAudioDec * dec, GstOMXPort * port,
   gint rate, channels, mpegversion;
   const gchar *stream_format;
 
-  g_return_val_if_fail (dec, NULL);
-  g_return_val_if_fail (port, NULL);
-  g_return_val_if_fail (caps, NULL);
+  g_return_val_if_fail (dec, FALSE);
+  g_return_val_if_fail (port, FALSE);
+  g_return_val_if_fail (caps, FALSE);
 
   self = GST_OMX_AAC_DEC (dec);
   gst_omx_port_get_port_definition (port, &port_def);
@@ -213,9 +213,9 @@ gst_omx_aac_dec_is_format_change (GstOMXAudioDec * dec, GstOMXPort * port,
   gint rate, channels, mpegversion;
   const gchar *stream_format;
 
-  g_return_val_if_fail (dec, NULL);
-  g_return_val_if_fail (port, NULL);
-  g_return_val_if_fail (caps, NULL);
+  g_return_val_if_fail (dec, FALSE);
+  g_return_val_if_fail (port, FALSE);
+  g_return_val_if_fail (caps, FALSE);
 
   self = GST_OMX_AAC_DEC (dec);
 
@@ -275,7 +275,7 @@ gst_omx_aac_dec_is_format_change (GstOMXAudioDec * dec, GstOMXPort * port,
 static gint
 gst_omx_aac_dec_get_samples_per_frame (GstOMXAudioDec * dec, GstOMXPort * port)
 {
-  g_return_val_if_fail (dec, NULL);
+  g_return_val_if_fail (dec, GST_FLOW_ERROR);
   return GST_OMX_AAC_DEC (dec)->spf;
 }
 
@@ -286,8 +286,8 @@ gst_omx_aac_dec_get_channel_positions (GstOMXAudioDec * dec,
   OMX_AUDIO_PARAM_PCMMODETYPE pcm_param;
   OMX_ERRORTYPE err;
 
-  g_return_val_if_fail (dec, NULL);
-  g_return_val_if_fail (port, NULL);
+  g_return_val_if_fail (dec, FALSE);
+  g_return_val_if_fail (port, FALSE);
 
   GST_OMX_INIT_STRUCT (&pcm_param);
   pcm_param.nPortIndex = port->index;
