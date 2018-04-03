@@ -293,7 +293,6 @@ gst_omx_camera_init (GstOMXCamera * self)
 
   self->clock =
       g_object_new (GST_TYPE_OMX_CLOCK, "name", "GstOmxCameraClock", NULL);
-  g_object_set (self->clock, "clock-type", GST_CLOCK_TYPE_OTHER, NULL);
 }
 
 static void
@@ -368,8 +367,8 @@ gst_omx_camera_set_property (GObject * object,
         gst_omx_camera_set_skip_frames (self);
       break;
     case PROP_PROVIDE_CLOCK:
-      self->provide_clock = g_value_get_boolean (value);
       GST_OBJECT_LOCK (self);
+      self->provide_clock = g_value_get_boolean (value);
       if (self->provide_clock)
         GST_OBJECT_FLAG_SET (self, GST_ELEMENT_FLAG_PROVIDE_CLOCK);
       else
@@ -428,7 +427,9 @@ gst_omx_camera_get_property (GObject * object,
       break;
     }
     case PROP_PROVIDE_CLOCK:
+      GST_OBJECT_LOCK (self);
       g_value_set_boolean (value, self->provide_clock);
+      GST_OBJECT_UNLOCK (self);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1130,7 +1131,7 @@ static GstClock *
 gst_omx_camera_provide_clock (GstElement * element)
 {
   GstOMXCamera *self = GST_OMX_CAMERA (element);
-  GstClock *clock;
+  GstClock *clock = NULL;
 
   g_return_val_if_fail (GST_IS_OMX_CLOCK (self->clock), NULL);
 
@@ -1141,7 +1142,6 @@ gst_omx_camera_provide_clock (GstElement * element)
   clock = GST_CLOCK_CAST (gst_object_ref (self->clock));
 
   GST_OBJECT_UNLOCK (self);
-
 
   return clock;
 

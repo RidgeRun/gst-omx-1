@@ -52,6 +52,7 @@ gst_omx_clock_class_init (GstOmxClockClass * klass)
 static void
 gst_omx_clock_init (GstOmxClock * self)
 {
+  g_object_set (self, "clock-type", GST_CLOCK_TYPE_OTHER, NULL);
   self->last_tick = GST_CLOCK_TIME_NONE;
   self->last_time = GST_CLOCK_TIME_NONE;
   self->base = GST_CLOCK_TIME_NONE;
@@ -80,6 +81,7 @@ gst_omx_clock_get_internal_time (GstClock * clock)
   GstClockTimeDiff offset;
   GstClockTime time;
 
+  g_return_val_if_fail (clock, GST_CLOCK_TIME_NONE);
   self = GST_OMX_CLOCK (clock);
 
   if (self->last_time == GST_CLOCK_TIME_NONE) {
@@ -101,6 +103,7 @@ void
 gst_omx_clock_new_tick (GstOmxClock * self, GstClockTime tick)
 {
   GstClockTimeDiff offset;
+  g_return_if_fail (self);
   GST_OBJECT_LOCK (self);
 
   if (GST_CLOCK_TIME_NONE == self->base) {
@@ -134,6 +137,7 @@ gst_omx_clock_new_tick (GstOmxClock * self, GstClockTime tick)
 void
 gst_omx_clock_reset (GstOmxClock * self)
 {
+  g_return_if_fail (self);
   GST_INFO_OBJECT (self, "Resetting clock");
   self->first_time = TRUE;
   self->hw_offset = 0;
