@@ -23,6 +23,9 @@
 #define __GST_OMX_CLOCK_H__
 
 #include <gst/gst.h>
+#ifdef OMX_VFCC_PARAM_TIMESTAMP_INSTALLED
+#include "gstomx.h"
+#endif
 
 G_BEGIN_DECLS
 #define GST_TYPE_OMX_CLOCK \
@@ -41,6 +44,9 @@ typedef struct _GstOmxClockClass GstOmxClockClass;
 struct _GstOmxClock
 {
   GstSystemClock parent;
+#ifdef OMX_VFCC_PARAM_TIMESTAMP_INSTALLED
+  GstOMXComponent *comp;
+#else
   GstClockTime last_tick;
   GstClockTime last_time;
   GstClockTime sys_offset;
@@ -48,6 +54,7 @@ struct _GstOmxClock
   GstClockTimeDiff hw_offset;
   GstClockTime base;
   gboolean first_time;
+#endif
 };
 
 
@@ -57,8 +64,10 @@ struct _GstOmxClockClass
 };
 
 GType gst_omx_clock_get_type (void);
+#ifndef OMX_VFCC_PARAM_TIMESTAMP_INSTALLED
 void gst_omx_clock_new_tick (GstOmxClock * this, GstClockTime tick);
 void gst_omx_clock_reset (GstOmxClock * this);
+#endif
 
 G_END_DECLS
 #endif /* __GST_OMX_CLOCK_H__ */

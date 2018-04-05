@@ -49,7 +49,7 @@ struct _GstOMXCamera
 
   /* < protected > */
   GstOMXComponent *comp;
-  GstOMXPort *outport;;
+  GstOMXPort *outport;
 
   /* Format */
   GstCaps *probed_caps;

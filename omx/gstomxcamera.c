@@ -848,8 +848,9 @@ gst_omx_camera_close (GstOMXCamera * self)
     self->comp = NULL;
     self->outport = NULL;
   }
-
+#ifndef OMX_VFCC_PARAM_TIMESTAMP_INSTALLED
   gst_omx_clock_reset (self->clock);
+#endif
 
   GST_INFO_OBJECT (self, "Closed component %s", klass->cdata.component_name);
   return TRUE;
@@ -1086,8 +1087,10 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   if (G_UNLIKELY (ret != GST_FLOW_OK))
     goto error;
 
+#ifndef OMX_VFCC_PARAM_TIMESTAMP_INSTALLED
   /* Refresh the OMX clock */
   gst_omx_clock_new_tick (self->clock, GST_BUFFER_PTS (*buf));
+#endif
 
   if (!self->provide_clock) {
     timestamp = GST_BUFFER_PTS (*buf);
