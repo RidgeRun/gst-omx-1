@@ -24,6 +24,7 @@
 #include <gst/video/video.h>
 #include <gst/base/gstpushsrc.h>
 #include "gstomx.h"
+#include "gstomxclock.h"
 
 G_BEGIN_DECLS
 #define GST_TYPE_OMX_CAMERA \
@@ -48,7 +49,7 @@ struct _GstOMXCamera
 
   /* < protected > */
   GstOMXComponent *comp;
-  GstOMXPort *outport;;
+  GstOMXPort *outport;
 
   /* Format */
   GstCaps *probed_caps;
@@ -80,6 +81,9 @@ struct _GstOMXCamera
   gint scan_type;
   gint num_buffers;
   guint skip_frames;
+  gboolean provide_clock;
+
+  GstOmxClock *clock;
 
   /*< private > */
   GstOMXCameraPrivate *priv;
