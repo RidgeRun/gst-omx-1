@@ -275,7 +275,7 @@ gst_omx_aac_dec_is_format_change (GstOMXAudioDec * dec, GstOMXPort * port,
 static gint
 gst_omx_aac_dec_get_samples_per_frame (GstOMXAudioDec * dec, GstOMXPort * port)
 {
-  g_return_val_if_fail (dec, GST_FLOW_ERROR);
+  g_return_val_if_fail (dec, -1);
   return GST_OMX_AAC_DEC (dec)->spf;
 }
 
