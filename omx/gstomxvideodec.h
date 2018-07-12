@@ -82,6 +82,10 @@ struct _GstOMXVideoDec
   gboolean eos;
 
   GstFlowReturn downstream_flow_ret;
+
+  /* Internal flag for seek operations */
+  gboolean flush_flag;
+
 #ifdef USE_OMX_TARGET_RPI
   GstOMXComponent *egl_render;
   GstOMXPort *egl_in_port, *egl_out_port;

@@ -76,10 +76,10 @@ static GstFlowReturn gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
 static GstFlowReturn gst_omx_video_dec_finish (GstVideoDecoder * decoder);
 static gboolean gst_omx_video_dec_decide_allocation (GstVideoDecoder * bdec,
     GstQuery * query);
-
+static gboolean gst_omx_video_dec_sink_event (GstVideoDecoder * decoder,
+    GstEvent * event);
 static GstFlowReturn gst_omx_video_dec_drain (GstVideoDecoder * decoder,
     gboolean is_eos);
-
 static OMX_ERRORTYPE gst_omx_video_dec_allocate_output_buffers (GstOMXVideoDec *
     self);
 static OMX_ERRORTYPE gst_omx_video_dec_deallocate_output_buffers (GstOMXVideoDec
@@ -99,6 +99,7 @@ enum
 #define GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT 4
 #define GST_OMX_VIDEO_DEC_CHROMA_Y_OFFSET 89
 #define GST_OMX_VIDEO_DEC_CHROMA_X_OFFSET 1150
+#define GST_OMX_VIDEO_DEC_SEEK_IMMEDIATE 1
 
 /* class initialization */
 
@@ -138,8 +139,6 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
   video_decoder_class->close = GST_DEBUG_FUNCPTR (gst_omx_video_dec_close);
   video_decoder_class->start = GST_DEBUG_FUNCPTR (gst_omx_video_dec_start);
   video_decoder_class->stop = GST_DEBUG_FUNCPTR (gst_omx_video_dec_stop);
-  video_decoder_class->flush = GST_DEBUG_FUNCPTR (gst_omx_video_dec_flush);
-  video_decoder_class->reset = GST_DEBUG_FUNCPTR (gst_omx_video_dec_reset);
   video_decoder_class->set_format =
       GST_DEBUG_FUNCPTR (gst_omx_video_dec_set_format);
   video_decoder_class->handle_frame =
@@ -147,6 +146,8 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
   video_decoder_class->finish = GST_DEBUG_FUNCPTR (gst_omx_video_dec_finish);
   video_decoder_class->decide_allocation =
       GST_DEBUG_FUNCPTR (gst_omx_video_dec_decide_allocation);
+  video_decoder_class->sink_event =
+      GST_DEBUG_FUNCPTR (gst_omx_video_dec_sink_event);
 
   klass->cdata.type = GST_OMX_COMPONENT_TYPE_FILTER;
   klass->cdata.default_src_template_caps =
@@ -162,7 +163,7 @@ gst_omx_video_dec_init (GstOMXVideoDec * self)
   self->input_buffers = GST_OMX_VIDEO_DEC_INPUT_BUFFERS_DEFAULT;
   gst_video_decoder_set_packetized (GST_VIDEO_DECODER (self), TRUE);
   GST_PAD_SET_ACCEPT_TEMPLATE (GST_VIDEO_DECODER_SINK_PAD (self));
-
+  self->flush_flag = FALSE;
   g_mutex_init (&self->drain_lock);
   g_cond_init (&self->drain_cond);
 }
@@ -1289,12 +1290,25 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
   GstOMXAcquireBufferReturn acq_return;
   GstClockTimeDiff deadline;
   OMX_ERRORTYPE err;
+  gboolean flush_flag;
 
 #if defined (USE_OMX_TARGET_RPI) && defined (HAVE_GST_GL)
   port = self->eglimage ? self->egl_out_port : self->dec_out_port;
 #else
   port = self->dec_out_port;
 #endif
+
+  GST_VIDEO_DECODER_STREAM_LOCK (self);
+  flush_flag = self->flush_flag;
+  GST_VIDEO_DECODER_STREAM_UNLOCK (self);
+
+  if (flush_flag) {
+    GST_DEBUG_OBJECT (self, "Got frame after flush start");
+    self->downstream_flow_ret = GST_FLOW_OK;
+    return;
+  }
+
+  GST_DEBUG_OBJECT (self, "Read frame from component");
 
   acq_return = gst_omx_port_acquire_buffer (port, &buf);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
@@ -1428,14 +1442,18 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
     flow_ret = gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
     frame = NULL;
   } else if (!frame && (buf->omx_buf->nFilledLen > 0 || buf->eglimage)) {
-    GstBuffer *outbuf = NULL;
-    /* This sometimes happens at EOS or if the input is not properly framed,
-     * let's handle it gracefully by allocating a new buffer for the current
-     * caps and filling it
-     */
 
+    /* This sometimes happens at EOS or if the input is not properly framed,
+     * if we are seeking release buffer and leave immediately, else allocate
+     * a new buffer for the current caps and fill it
+     */
     GST_ERROR_OBJECT (self, "No corresponding frame found");
 
+#ifdef GST_OMX_VIDEO_DEC_SEEK_IMMEDIATE
+    gst_omx_port_release_buffer (port, buf);
+    buf = NULL;
+#else
+    GstBuffer *outbuf = NULL;
     if (self->out_port_pool) {
       gint i, n;
       GstBufferPoolAcquireParams params = { 0, };
@@ -1471,6 +1489,7 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
     }
 
     flow_ret = gst_pad_push (GST_VIDEO_DECODER_SRC_PAD (self), outbuf);
+#endif
   } else if (buf->omx_buf->nFilledLen > 0 || buf->eglimage) {
     if (self->out_port_pool) {
       gint i, n;
@@ -1528,8 +1547,6 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
     flow_ret = gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
     frame = NULL;
   }
-
-  GST_DEBUG_OBJECT (self, "Read frame from component");
 
   GST_DEBUG_OBJECT (self, "Finished frame: %s", gst_flow_get_name (flow_ret));
 
@@ -1623,7 +1640,6 @@ flow_error:
       GST_ELEMENT_ERROR (self, STREAM, FAILED,
           ("Internal data stream error."), ("stream stopped, reason %s",
               gst_flow_get_name (flow_ret)));
-
       gst_pad_push_event (GST_VIDEO_DECODER_SRC_PAD (self),
           gst_event_new_eos ());
       gst_pad_pause_task (GST_VIDEO_DECODER_SRC_PAD (self));
@@ -2247,7 +2263,7 @@ gst_omx_video_dec_flush (GstVideoDecoder * decoder)
   GstOMXVideoDec *self = GST_OMX_VIDEO_DEC (decoder);
   OMX_ERRORTYPE err = OMX_ErrorNone;
 
-  GST_WARNING_OBJECT (self, "Flushing decoder");
+  GST_DEBUG_OBJECT (self, "Flushing decoder");
 
   /* 0) Pause the components */
   if (gst_omx_component_get_state (self->dec, 0) == OMX_StateExecuting) {
@@ -2337,11 +2353,22 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
   guint offset = 0, size;
   GstClockTime timestamp, duration;
   OMX_ERRORTYPE err;
+  gboolean flush_flag;
 
   self = GST_OMX_VIDEO_DEC (decoder);
   klass = GST_OMX_VIDEO_DEC_GET_CLASS (self);
 
   GST_DEBUG_OBJECT (self, "Handling frame");
+
+  GST_VIDEO_DECODER_STREAM_LOCK (self);
+  flush_flag = self->flush_flag;
+  GST_VIDEO_DECODER_STREAM_UNLOCK (self);
+
+  if (flush_flag) {
+    GST_DEBUG_OBJECT (self, "Got frame after flush start");
+    gst_video_codec_frame_unref (frame);
+    return GST_FLOW_OK;
+  }
 
   if (self->eos) {
     GST_WARNING_OBJECT (self, "Got frame after EOS");
@@ -2770,4 +2797,63 @@ gst_omx_video_dec_decide_allocation (GstVideoDecoder * bdec, GstQuery * query)
   gst_object_unref (pool);
 
   return TRUE;
+}
+
+static gboolean
+gst_omx_video_dec_sink_event (GstVideoDecoder * decoder, GstEvent * event)
+{
+  GstOMXVideoDec *self = GST_OMX_VIDEO_DEC (decoder);
+  gboolean ret = TRUE;
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_FLUSH_START:
+      GST_VIDEO_DECODER_STREAM_LOCK (self);
+      self->flush_flag = TRUE;
+      self->started = FALSE;
+      self->downstream_flow_ret = GST_FLOW_OK;
+      GST_VIDEO_DECODER_STREAM_UNLOCK (self);
+      /* Stop srcpad task */
+      gst_pad_stop_task (GST_VIDEO_DECODER_SRC_PAD (self));
+      /* Flush omx ports */
+      gst_omx_port_set_flushing (self->dec_in_port, 5 * GST_SECOND, TRUE);
+      gst_omx_port_set_flushing (self->dec_out_port, 5 * GST_SECOND, TRUE);
+      break;
+    case GST_EVENT_FLUSH_STOP:
+      /* Unflush omx ports */
+      gst_omx_port_set_flushing (self->dec_in_port, 5 * GST_SECOND, FALSE);
+      gst_omx_port_set_flushing (self->dec_out_port, 5 * GST_SECOND, FALSE);
+      GST_VIDEO_DECODER_STREAM_LOCK (self);
+      self->flush_flag = FALSE;
+      self->downstream_flow_ret = GST_FLOW_OK;
+      GST_VIDEO_DECODER_STREAM_UNLOCK (self);
+      break;
+    default:
+      break;
+  }
+
+  ret =
+      GST_VIDEO_DECODER_CLASS (gst_omx_video_dec_parent_class)->sink_event
+      (decoder, event);
+
+  if (!ret) {
+    GST_ERROR_OBJECT (self, "Error processing sink event");
+    goto exit;
+  }
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_SEGMENT:
+      /* Restart pad task if segment event arrives and task is not started */
+      if (gst_pad_get_task_state (GST_VIDEO_DECODER_SRC_PAD (self)) !=
+          GST_TASK_STARTED) {
+        GST_DEBUG_OBJECT (self, "Restarting task");
+        gst_pad_start_task (GST_VIDEO_DECODER_SRC_PAD (self),
+            (GstTaskFunction) gst_omx_video_dec_loop, decoder, NULL);
+      }
+      break;
+    default:
+      break;
+  }
+
+exit:
+  return ret;
 }

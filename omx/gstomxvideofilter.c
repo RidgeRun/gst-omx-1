@@ -1480,9 +1480,6 @@ gst_omx_video_filter_sink_event (GstPad * pad, GstObject * parent,
   GstOMXVideoFilter *self = GST_OMX_VIDEO_FILTER (parent);
   gboolean ret = FALSE;
 
-  GST_DEBUG_OBJECT (self, "received event %d, %s", GST_EVENT_TYPE (event),
-      GST_EVENT_TYPE_NAME (event));
-
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CAPS:
     {
