@@ -83,7 +83,6 @@ gst_omx_audio_dec_class_init (GstOMXAudioDecClass * klass)
   audio_decoder_class->close = GST_DEBUG_FUNCPTR (gst_omx_audio_dec_close);
   audio_decoder_class->start = GST_DEBUG_FUNCPTR (gst_omx_audio_dec_start);
   audio_decoder_class->stop = GST_DEBUG_FUNCPTR (gst_omx_audio_dec_stop);
-  audio_decoder_class->flush = GST_DEBUG_FUNCPTR (gst_omx_audio_dec_flush);
   audio_decoder_class->set_format =
       GST_DEBUG_FUNCPTR (gst_omx_audio_dec_set_format);
   audio_decoder_class->handle_frame =
@@ -403,8 +402,8 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
 
     GST_DEBUG_OBJECT (self, "PCM params: eNumData %u,"
         "eEndian %u, nBitPerSample %u",
-        (guint)self->pcm_param.eNumData, (guint)self->pcm_param.eEndian,
-        (guint)self->pcm_param.nBitPerSample);
+        (guint) self->pcm_param.eNumData, (guint) self->pcm_param.eEndian,
+        (guint) self->pcm_param.nBitPerSample);
 
     gst_audio_info_set_format (&self->info,
         gst_audio_format_build_integer (self->pcm_param.eNumData ==
@@ -412,8 +411,8 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
             self->pcm_param.eEndian ==
             OMX_EndianLittle ? G_LITTLE_ENDIAN : G_BIG_ENDIAN,
             self->pcm_param.nBitPerSample, self->pcm_param.nBitPerSample),
-            self->pcm_param.nSamplingRate, self->pcm_param.nChannels,
-            self->position);
+        self->pcm_param.nSamplingRate, self->pcm_param.nChannels,
+        self->position);
 
     GST_DEBUG_OBJECT (self,
         "Setting output state: format %s, rate %u, channels %u",
@@ -664,15 +663,8 @@ flow_error:
       gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
       self->started = FALSE;
     } else if (flow_ret == GST_FLOW_FLUSHING) {
-      GST_DEBUG_OBJECT (self, "Flushing -- stopping task");
-      g_mutex_lock (&self->drain_lock);
-      if (self->draining) {
-        self->draining = FALSE;
-        g_cond_broadcast (&self->drain_cond);
-      }
-      gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
+      GST_DEBUG_OBJECT (self, "Flushing ..");
       self->started = FALSE;
-      g_mutex_unlock (&self->drain_lock);
     }
     GST_AUDIO_DECODER_STREAM_UNLOCK (self);
     return;

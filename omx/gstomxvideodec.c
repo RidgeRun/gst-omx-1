@@ -1447,7 +1447,8 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
      * if we are seeking release buffer and leave immediately, else allocate
      * a new buffer for the current caps and fill it
      */
-    GST_ERROR_OBJECT (self, "No corresponding frame found");
+
+    GST_WARNING_OBJECT (self, "No corresponding frame found");
 
 #ifdef GST_OMX_VIDEO_DEC_SEEK_IMMEDIATE
     gst_omx_port_release_buffer (port, buf);
@@ -2807,25 +2808,31 @@ gst_omx_video_dec_sink_event (GstVideoDecoder * decoder, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_FLUSH_START:
-      GST_VIDEO_DECODER_STREAM_LOCK (self);
       self->flush_flag = TRUE;
       self->started = FALSE;
       self->downstream_flow_ret = GST_FLOW_OK;
-      GST_VIDEO_DECODER_STREAM_UNLOCK (self);
       /* Stop srcpad task */
       gst_pad_stop_task (GST_VIDEO_DECODER_SRC_PAD (self));
       /* Flush omx ports */
       gst_omx_port_set_flushing (self->dec_in_port, 5 * GST_SECOND, TRUE);
       gst_omx_port_set_flushing (self->dec_out_port, 5 * GST_SECOND, TRUE);
+      /* Send omx component to pause state */
+      if (gst_omx_component_get_state (self->dec, 0) == OMX_StateExecuting) {
+        gst_omx_component_set_state (self->dec, OMX_StatePause);
+        gst_omx_component_get_state (self->dec, GST_CLOCK_TIME_NONE);
+      }
       break;
     case GST_EVENT_FLUSH_STOP:
+      /* (Re)Send omx component to executing state */
+      if (gst_omx_component_get_state (self->dec, 0) == OMX_StatePause) {
+        gst_omx_component_set_state (self->dec, OMX_StateExecuting);
+        gst_omx_component_get_state (self->dec, GST_CLOCK_TIME_NONE);
+      }
       /* Unflush omx ports */
       gst_omx_port_set_flushing (self->dec_in_port, 5 * GST_SECOND, FALSE);
       gst_omx_port_set_flushing (self->dec_out_port, 5 * GST_SECOND, FALSE);
-      GST_VIDEO_DECODER_STREAM_LOCK (self);
       self->flush_flag = FALSE;
       self->downstream_flow_ret = GST_FLOW_OK;
-      GST_VIDEO_DECODER_STREAM_UNLOCK (self);
       break;
     default:
       break;
