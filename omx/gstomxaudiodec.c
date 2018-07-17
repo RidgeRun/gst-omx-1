@@ -663,7 +663,7 @@ flow_error:
       gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
       self->started = FALSE;
     } else if (flow_ret == GST_FLOW_FLUSHING) {
-      GST_DEBUG_OBJECT (self, "Flushing ..");
+      GST_DEBUG_OBJECT (self, "Flushing");
       self->started = FALSE;
     }
     GST_AUDIO_DECODER_STREAM_UNLOCK (self);
