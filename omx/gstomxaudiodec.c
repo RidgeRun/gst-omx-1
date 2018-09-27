@@ -1043,7 +1043,13 @@ gst_omx_audio_dec_handle_frame (GstAudioDecoder * decoder, GstBuffer * inbuf)
   GST_DEBUG_OBJECT (self, "Handling frame");
 
   if (self->downstream_flow_ret != GST_FLOW_OK) {
-    return self->downstream_flow_ret;
+    if (self->downstream_flow_ret == GST_FLOW_FLUSHING) {
+      self->downstream_flow_ret = GST_FLOW_OK;
+    } else {
+      GST_ERROR_OBJECT (self, "Downstream flow return: %s",
+          gst_flow_get_name (self->downstream_flow_ret));
+      return self->downstream_flow_ret;
+    }
   }
 
   if (!self->started) {
