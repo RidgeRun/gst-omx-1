@@ -1044,6 +1044,7 @@ gst_omx_audio_dec_handle_frame (GstAudioDecoder * decoder, GstBuffer * inbuf)
 
   if (self->downstream_flow_ret != GST_FLOW_OK) {
     if (self->downstream_flow_ret == GST_FLOW_FLUSHING) {
+      /* Avoid returning with error code when the element is flushing because it would stop the incoming stream */
       self->downstream_flow_ret = GST_FLOW_OK;
     } else {
       GST_ERROR_OBJECT (self, "Downstream flow return: %s",
