@@ -1160,8 +1160,11 @@ static void
 gst_omx_camera_get_times (GstBaseSrc * src, GstBuffer * buffer,
     GstClockTime * start, GstClockTime * end)
 {
-  *start = GST_BUFFER_PTS (buffer);
-  end = start + GST_BUFFER_DURATION (buffer);
+  GstOMXCamera *self = GST_OMX_CAMERA (src);
+  if (self->provide_clock) {
+    *start = GST_BUFFER_PTS (buffer);
+    end = start + GST_BUFFER_DURATION (buffer);
+  }
 }
 
 static void
