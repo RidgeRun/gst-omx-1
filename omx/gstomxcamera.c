@@ -1065,8 +1065,7 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
       ret = GST_FLOW_ERROR;
       goto error;
     } else {
-      if (self->provide_clock)
-        self->started = TRUE;
+      self->started = TRUE;
     }
   }
 
@@ -1114,9 +1113,9 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
    */
   delay = 0;
 
-  GST_DEBUG_OBJECT (src, "ts: %" GST_TIME_FORMAT " now %" GST_TIME_FORMAT
+  GST_DEBUG_OBJECT (src, "ts: %" GST_TIME_FORMAT
       " delay %" GST_TIME_FORMAT, GST_TIME_ARGS (timestamp),
-      GST_TIME_ARGS (gstnow), GST_TIME_ARGS (delay));
+      GST_TIME_ARGS (delay));
 
   /* set buffer metadata */
   GST_BUFFER_OFFSET (*buf) = self->offset++;
@@ -1138,6 +1137,8 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   GST_INFO_OBJECT (src, "out ts %" GST_TIME_FORMAT, GST_TIME_ARGS (timestamp));
 
   GST_BUFFER_TIMESTAMP (*buf) = timestamp;
+  GST_BUFFER_PTS (*buf) = timestamp;
+  GST_BUFFER_DTS (*buf) = timestamp;
 
   return ret;
 
