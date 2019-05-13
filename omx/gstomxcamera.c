@@ -1050,36 +1050,22 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
 {
   GstClock *clock;
   GstFlowReturn ret;
-  GstClockTime abs_time = 0, base_time = 0, timestamp;
+  GstClockTime abs_time = 0, base_time = 0, timestamp = 0;
   GstOMXCamera *self = NULL;
+  GstClockTime delay;
+
 
   g_return_val_if_fail (src, GST_FLOW_ERROR);
   g_return_val_if_fail (buf, GST_FLOW_ERROR);
 
   self = GST_OMX_CAMERA (src);
 
-  if (!self->provide_clock) {
-    /* timestamps, LOCK to get clock and base time. */
-    GST_OBJECT_LOCK (self);
-    if ((clock = GST_ELEMENT_CLOCK (self))) {
-      /* we have a clock, get base time and ref clock */
-      base_time = GST_ELEMENT (self)->base_time;
-      abs_time = gst_clock_get_time (clock);
-    } else {
-      /* no clock, can't set timestamps */
-      base_time = GST_CLOCK_TIME_NONE;
-      abs_time = GST_CLOCK_TIME_NONE;
-    }
-    GST_OBJECT_UNLOCK (self);
-  }
-
   if (!self->started) {
     if (!gst_omx_camera_component_init (self, NULL)) {
       ret = GST_FLOW_ERROR;
       goto error;
     } else {
-      if (self->provide_clock)
-        self->started = TRUE;
+      self->started = TRUE;
     }
   }
 
@@ -1092,32 +1078,67 @@ gst_omx_camera_create (GstPushSrc * src, GstBuffer ** buf)
   gst_omx_clock_new_tick (self->clock, GST_BUFFER_PTS (*buf));
 #endif
 
-  if (!self->provide_clock) {
-    timestamp = GST_BUFFER_PTS (*buf);
+  /*
+   * Implementation taken from gstv4l2src.c
+   */
 
-    if (!self->started) {
-      self->running_time = abs_time - base_time;
-      if (!self->running_time)
-        self->running_time = timestamp;
-      self->omx_delay = timestamp - self->running_time;
+  timestamp = GST_BUFFER_TIMESTAMP (buf);
 
-      GST_DEBUG_OBJECT (self, "OMX delay %" G_GINT64_FORMAT, self->omx_delay);
-      self->started = TRUE;
-    }
-
-    /* set buffer metadata */
-    GST_BUFFER_OFFSET (*buf) = self->offset++;
-    GST_BUFFER_OFFSET_END (*buf) = self->offset;
-
-    /* the time now is the time of the clock minus the base time */
-    timestamp = timestamp - self->omx_delay;
-
-    GST_DEBUG_OBJECT (self, "Adjusted timestamp %" GST_TIME_FORMAT,
-        GST_TIME_ARGS (timestamp));
-
-    GST_BUFFER_PTS (*buf) = timestamp;
-    GST_BUFFER_DTS (*buf) = GST_BUFFER_PTS (*buf);
+  /* timestamps, LOCK to get clock and base time. */
+  /* FIXME: element clock and base_time is rarely changing */
+  GST_OBJECT_LOCK (src);
+  if ((clock = GST_ELEMENT_CLOCK (src))) {
+    /* we have a clock, get base time and ref clock */
+    base_time = GST_ELEMENT (src)->base_time;
+    gst_object_ref (clock);
+  } else {
+    /* no clock, can't set timestamps */
+    base_time = GST_CLOCK_TIME_NONE;
   }
+  GST_OBJECT_UNLOCK (src);
+
+  /* sample pipeline clock */
+  if (clock) {
+    abs_time = gst_clock_get_time (clock);
+    gst_object_unref (clock);
+  } else {
+    abs_time = GST_CLOCK_TIME_NONE;
+  }
+
+  /* It does make sense to compute a delay when using v4l2 devices since
+   * the specs say system time must be used, so we can use system time to
+   * compute the delay since the capture until now. The only way to get the
+   * time from the BIOS is via the clock, which we already absorbed in the
+   * abs_time...
+   */
+  delay = 0;
+
+  GST_DEBUG_OBJECT (src, "ts: %" GST_TIME_FORMAT
+      " delay %" GST_TIME_FORMAT, GST_TIME_ARGS (timestamp),
+      GST_TIME_ARGS (delay));
+
+  /* set buffer metadata */
+  GST_BUFFER_OFFSET (*buf) = self->offset++;
+  GST_BUFFER_OFFSET_END (*buf) = self->offset;
+
+  if (G_LIKELY (abs_time != GST_CLOCK_TIME_NONE)) {
+    /* the time now is the time of the clock minus the base time */
+    timestamp = abs_time - base_time;
+
+    /* adjust for delay in the device */
+    if (timestamp > delay)
+      timestamp -= delay;
+    else
+      timestamp = 0;
+  } else {
+    timestamp = GST_CLOCK_TIME_NONE;
+  }
+
+  GST_INFO_OBJECT (src, "out ts %" GST_TIME_FORMAT, GST_TIME_ARGS (timestamp));
+
+  GST_BUFFER_TIMESTAMP (*buf) = timestamp;
+  GST_BUFFER_PTS (*buf) = timestamp;
+  GST_BUFFER_DTS (*buf) = timestamp;
 
   return ret;
 
