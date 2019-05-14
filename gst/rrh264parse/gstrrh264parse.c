@@ -489,17 +489,25 @@ gst_rr_h264_parse_to_packetized (GstRrH264Parse * self, GstBuffer * buffer)
       curr_nal_type = (data[i + 1]) & 0x1f;
       GST_DEBUG_OBJECT (self, "NAL unit %d", curr_nal_type);
       if (self->single_nalu) {
-        if ((curr_nal_type == GST_H264_NAL_SPS)
-            || (curr_nal_type == GST_H264_NAL_PPS)) {
-          GST_DEBUG_OBJECT (self, "single NALU, found a I-frame");
-          GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
-	  gst_buffer_resize (buffer, offset + self->header_size, -1);
-          mark = i + self->header_size + 1;
-        } else {
+	if (curr_nal_type != GST_H264_NAL_SLICE && curr_nal_type != GST_H264_NAL_SLICE_IDR) {
+	  continue;
+	}
+
+        if (curr_nal_type == GST_H264_NAL_SLICE) {
           GST_DEBUG_OBJECT (self, "single NALU, found a P-frame");
           GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
-          mark = i + 1;
-        }
+        } else {
+	  GST_DEBUG_OBJECT (self, "single NALU, found an I-frame");
+          GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+	}
+
+	/* We just skipped some NALs, resize buffer */
+	if (i > NAL_LENGTH) {
+	  GST_DEBUG_OBJECT (self, "adding offset of %d", i);
+	  gst_buffer_resize (buffer, offset + i - NAL_LENGTH + 1, -1);
+	}
+
+	mark = i + 1;
         i = size - NAL_LENGTH;
         break;
       } else {
