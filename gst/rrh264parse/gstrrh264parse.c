@@ -466,6 +466,7 @@ gst_rr_h264_parse_to_packetized (GstRrH264Parse * self, GstBuffer * buffer)
   gint size;
   gint32 state;
   const gint32 start_code = 0x00000001;
+  gsize offset;
 
   GST_DEBUG_OBJECT (self, "parsing byte-stream to avc");
 
@@ -474,8 +475,11 @@ gst_rr_h264_parse_to_packetized (GstRrH264Parse * self, GstBuffer * buffer)
     return FALSE;
   }
 
+  gst_buffer_get_sizes (buffer, &offset, NULL);
+
   data = info.data;
   size = info.size;
+
   /*Initialize to a pattern that does not match the start code */
   state = ~(start_code);
   for (i = 0; i < size - NAL_LENGTH; i++) {
@@ -485,20 +489,25 @@ gst_rr_h264_parse_to_packetized (GstRrH264Parse * self, GstBuffer * buffer)
       curr_nal_type = (data[i + 1]) & 0x1f;
       GST_DEBUG_OBJECT (self, "NAL unit %d", curr_nal_type);
       if (self->single_nalu) {
-        if ((curr_nal_type == GST_H264_NAL_SPS)
-            || (curr_nal_type == GST_H264_NAL_PPS)) {
-          GST_DEBUG_OBJECT (self, "single NALU, found a I-frame");
-          GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
-          /* Caution: here we are asumming the output buffer only 
-           * has one memory block*/
-          info.memory->offset = self->header_size;
-          gst_buffer_set_size (buffer, size - self->header_size);
-          mark = i + self->header_size + 1;
-        } else {
+	if (curr_nal_type != GST_H264_NAL_SLICE && curr_nal_type != GST_H264_NAL_SLICE_IDR) {
+	  continue;
+	}
+
+        if (curr_nal_type == GST_H264_NAL_SLICE) {
           GST_DEBUG_OBJECT (self, "single NALU, found a P-frame");
           GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
-          mark = i + 1;
-        }
+        } else {
+	  GST_DEBUG_OBJECT (self, "single NALU, found an I-frame");
+          GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+	}
+
+	/* We just skipped some NALs, resize buffer */
+	if (i > NAL_LENGTH) {
+	  GST_DEBUG_OBJECT (self, "adding offset of %d", i);
+	  gst_buffer_resize (buffer, offset + i - NAL_LENGTH + 1, -1);
+	}
+
+	mark = i + 1;
         i = size - NAL_LENGTH;
         break;
       } else {
