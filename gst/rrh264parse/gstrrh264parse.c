@@ -498,7 +498,7 @@ gst_rr_h264_parse_to_packetized (GstRrH264Parse * self, GstBuffer * buffer)
           GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
         } else {
 	  GST_DEBUG_OBJECT (self, "single NALU, found an I-frame");
-          GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+          GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
 	}
 
 	/* We just skipped some NALs, resize buffer */
