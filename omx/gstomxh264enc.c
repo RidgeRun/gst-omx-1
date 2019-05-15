@@ -318,6 +318,54 @@ gst_omx_h264_enc_set_avc (GstOMXH264Enc * self)
   return TRUE;
 }
 
+static gboolean
+gst_omx_h264_enc_set_nal_extra (GstOMXH264Enc * self)
+{
+  OMX_ERRORTYPE err;
+  OMX_VIDEO_PARAM_STATICPARAMS tStaticParam;
+
+  /* Enable AUDs, SEI and VUI */
+  GST_OMX_INIT_STRUCT (&tStaticParam);
+
+  tStaticParam.nPortIndex = GST_OMX_VIDEO_ENC (self)->enc_out_port->index;
+
+  err =
+      gst_omx_component_get_parameter (GST_OMX_VIDEO_ENC (self)->enc,
+      OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+  if (err != OMX_ErrorNone) {
+    GST_WARNING_OBJECT (self, "OMX_Error != None, when getting OMX_TI_IndexParamVideoStaticParams");
+  }
+
+  tStaticParam.videoStaticParams.h264EncStaticParams.videnc2Params.encodingPreset = XDM_USER_DEFINED;
+
+  /* AUDs, SEI and IDR */
+  tStaticParam.videoStaticParams.h264EncStaticParams.nalUnitControlParams.naluControlPreset = IH264_NALU_CONTROL_USERDEFINED;
+  tStaticParam.videoStaticParams.h264EncStaticParams.nalUnitControlParams.naluPresentMaskStartOfSequence |= 0x23C0;
+  tStaticParam.videoStaticParams.h264EncStaticParams.nalUnitControlParams.naluPresentMaskIDRPicture |= 0x23C0;
+  tStaticParam.videoStaticParams.h264EncStaticParams.nalUnitControlParams.naluPresentMaskIntraPicture |= 0x23C0;
+  tStaticParam.videoStaticParams.h264EncStaticParams.nalUnitControlParams.naluPresentMaskNonIntraPicture |= 0x23C0;
+  tStaticParam.videoStaticParams.h264EncStaticParams.nalUnitControlParams.naluPresentMaskEndOfSequence |= 0x23C0;
+
+  /* VUI */
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.vuiCodingPreset = IH264_VUICODING_USERDEFINED;
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.aspectRatioInfoPresentFlag = 0;
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.aspectRatioIdc = 0;
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.videoSignalTypePresentFlag = 1;
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.videoFormat = IH264ENC_VIDEOFORMAT_COMPONENT;
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.videoFullRangeFlag = 0;
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.timingInfoPresentFlag = 1;
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.hrdParamsPresentFlag = 1;
+  tStaticParam.videoStaticParams.h264EncStaticParams.vuiCodingParams.numUnitsInTicks = 1000;
+
+  err = gst_omx_component_set_parameter (GST_OMX_VIDEO_ENC (self)->enc,
+  OMX_TI_IndexParamVideoStaticParams, &tStaticParam);
+  if (err != OMX_ErrorNone) {
+    GST_WARNING_OBJECT (self, "OMX_Error != None, when setting OMX_TI_IndexParamVideoStaticParams");
+  }
+
+  return TRUE;
+}
+
 static void
 gst_omx_h264_enc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
@@ -577,6 +625,9 @@ gst_omx_h264_enc_set_format (GstOMXVideoEnc * enc, GstOMXPort * port,
   }
 
   if (!gst_omx_h264_enc_set_avc (self))
+    return FALSE;
+
+  if (!gst_omx_h264_enc_set_nal_extra (self))
     return FALSE;
 
   if (!gst_omx_h264_enc_set_encoder_preset (self))
