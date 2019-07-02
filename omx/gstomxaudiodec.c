@@ -125,6 +125,7 @@ gst_omx_audio_dec_open (GstAudioDecoder * decoder)
       klass->cdata.component_name, klass->cdata.component_role,
       klass->cdata.hacks);
   self->started = FALSE;
+  self->audio_info_set = FALSE;
 
   if (!self->dec)
     return FALSE;
@@ -209,6 +210,7 @@ gst_omx_audio_dec_close (GstAudioDecoder * decoder)
   self->dec = NULL;
 
   self->started = FALSE;
+  self->audio_info_set = FALSE;
 
   GST_DEBUG_OBJECT (self, "Closed decoder");
 
@@ -247,6 +249,7 @@ gst_omx_audio_dec_change_state (GstElement * element, GstStateChange transition)
       self->downstream_flow_ret = GST_FLOW_OK;
       self->draining = FALSE;
       self->started = FALSE;
+      self->audio_info_set = FALSE;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       break;
@@ -276,6 +279,7 @@ gst_omx_audio_dec_change_state (GstElement * element, GstStateChange transition)
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       self->downstream_flow_ret = GST_FLOW_FLUSHING;
       self->started = FALSE;
+      self->audio_info_set = FALSE;
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       break;
@@ -307,7 +311,8 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
   }
 
   if (!gst_pad_has_current_caps (GST_AUDIO_DECODER_SRC_PAD (self)) ||
-      acq_return == GST_OMX_ACQUIRE_BUFFER_RECONFIGURE) {
+      acq_return == GST_OMX_ACQUIRE_BUFFER_RECONFIGURE
+      || !self->audio_info_set) {
     GstAudioChannelPosition omx_position[OMX_AUDIO_MAXCHANNELS];
     GstOMXAudioDecClass *klass = GST_OMX_AUDIO_DEC_GET_CLASS (self);
     gint i;
@@ -336,6 +341,7 @@ gst_omx_audio_dec_loop (GstOMXAudioDec * self)
 
     /* Just update caps */
     GST_AUDIO_DECODER_STREAM_LOCK (self);
+    self->audio_info_set = TRUE;
 
     /* Check pcm parameters before configuring decoder output */
     g_assert (self->pcm_param.ePCMMode == OMX_AUDIO_PCMModeLinear);
@@ -578,6 +584,7 @@ component_error:
     gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
     self->downstream_flow_ret = GST_FLOW_ERROR;
     self->started = FALSE;
+    self->audio_info_set = FALSE;
     return;
   }
 
@@ -592,6 +599,7 @@ flushing:
     gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
     self->downstream_flow_ret = GST_FLOW_FLUSHING;
     self->started = FALSE;
+    self->audio_info_set = FALSE;
     g_mutex_unlock (&self->drain_lock);
     return;
   }
@@ -653,6 +661,7 @@ flow_error:
           gst_event_new_eos ());
       gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
       self->started = FALSE;
+      self->audio_info_set = FALSE;
     } else if (flow_ret < GST_FLOW_EOS) {
       GST_ELEMENT_ERROR (self, STREAM, FAILED,
           ("Internal data stream error."), ("stream stopped, reason %s",
@@ -662,9 +671,11 @@ flow_error:
           gst_event_new_eos ());
       gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
       self->started = FALSE;
+      self->audio_info_set = FALSE;
     } else if (flow_ret == GST_FLOW_FLUSHING) {
       GST_DEBUG_OBJECT (self, "Flushing");
       self->started = FALSE;
+      self->audio_info_set = FALSE;
     }
     GST_AUDIO_DECODER_STREAM_UNLOCK (self);
     return;
@@ -678,6 +689,7 @@ reconfigure_error:
     gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
     self->downstream_flow_ret = GST_FLOW_ERROR;
     self->started = FALSE;
+    self->audio_info_set = FALSE;
     return;
   }
 
@@ -689,6 +701,7 @@ invalid_buffer:
     gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
     self->downstream_flow_ret = GST_FLOW_NOT_NEGOTIATED;
     self->started = FALSE;
+    self->audio_info_set = FALSE;
     GST_AUDIO_DECODER_STREAM_UNLOCK (self);
     return;
   }
@@ -701,6 +714,7 @@ caps_failed:
     GST_AUDIO_DECODER_STREAM_UNLOCK (self);
     self->downstream_flow_ret = GST_FLOW_NOT_NEGOTIATED;
     self->started = FALSE;
+    self->audio_info_set = FALSE;
     return;
   }
 release_error:
@@ -712,6 +726,7 @@ release_error:
     gst_pad_pause_task (GST_AUDIO_DECODER_SRC_PAD (self));
     self->downstream_flow_ret = GST_FLOW_ERROR;
     self->started = FALSE;
+    self->audio_info_set = FALSE;
     GST_AUDIO_DECODER_STREAM_UNLOCK (self);
     return;
   }
@@ -748,6 +763,7 @@ gst_omx_audio_dec_stop (GstAudioDecoder * decoder)
 
   self->downstream_flow_ret = GST_FLOW_FLUSHING;
   self->started = FALSE;
+  self->audio_info_set = FALSE;
 
   g_mutex_lock (&self->drain_lock);
   self->draining = FALSE;
