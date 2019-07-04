@@ -66,6 +66,7 @@ struct _GstOMXAudioDec
   /* TRUE if the component is configured and saw
    * the first buffer */
   gboolean started;
+  gboolean audio_info_set;
 
   GstClockTime last_upstream_ts;
 
