@@ -843,8 +843,10 @@ gst_omx_video_enc_loop (GstOMXVideoEnc * self)
 
   self->downstream_flow_ret = flow_ret;
 
+#ifdef GST_OMXVIDEOENC_DRAIN
   if (self->draining)
     g_cond_broadcast (&self->drain_cond);
+#endif
 
   GST_DEBUG_OBJECT (self, "Read frame from component");
 
@@ -1962,10 +1964,10 @@ gst_omx_video_enc_drain (GstOMXVideoEnc * self)
   self->started = FALSE;
 
   if ((klass->cdata.hacks & GST_OMX_HACK_NO_EMPTY_EOS_BUFFER)) {
+    GST_WARNING_OBJECT (self, "Component does not support empty EOS buffers");
+#ifdef GST_OMXVIDEOENC_DRAIN
     GList *frames;
     guint i, pending_frames;
-    GST_WARNING_OBJECT (self, "Component does not support empty EOS buffers");
-
     /* Make sure to release the base class stream lock, otherwise
      * _loop() can't call _finish_frame() and we might block forever
      * because no input buffers are released */
@@ -1991,6 +1993,7 @@ gst_omx_video_enc_drain (GstOMXVideoEnc * self)
     self->draining = FALSE;
 
     GST_VIDEO_ENCODER_STREAM_LOCK (self);
+#endif
     return GST_FLOW_OK;
   }
 
