@@ -345,9 +345,6 @@ gst_omx_component_handle_messages (GstOMXComponent * comp)
 
         GST_DEBUG_OBJECT (comp->parent, "%s port %u got buffer flags 0x%08x",
             comp->name, port->index, (guint) flags);
-        if ((flags & OMX_BUFFERFLAG_EOS)
-            && port->port_def.eDir == OMX_DirOutput)
-          port->eos = TRUE;
 
         break;
       }

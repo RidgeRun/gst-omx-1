@@ -251,7 +251,7 @@ gst_omx_video_filter_class_init (GstOMXVideoFilterClass * klass)
   g_object_class_install_property (gobject_class, PROP_OUTPUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
           "The amount of OMX output buffers",
-          1, 16, GST_OMX_VIDEO_FILTER_OUTPUT_BUFFERS_DEFAULT,
+          1, 22, GST_OMX_VIDEO_FILTER_OUTPUT_BUFFERS_DEFAULT,
           G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_INPUT_BUFFERS,

@@ -125,7 +125,7 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
   g_object_class_install_property (gobject_class, PROP_OUTPUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
           "The amount of OMX output buffers",
-          1, 16, GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          1, 32, GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_INPUT_BUFFERS,
       g_param_spec_uint ("input-buffers", "Input buffers",
@@ -2404,6 +2404,13 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
     }
   }
 
+  if (gst_pad_get_task_state (GST_VIDEO_DECODER_SRC_PAD (self)) !=
+      GST_TASK_STARTED) {
+    GST_DEBUG_OBJECT (self, "Restarting task");
+    gst_pad_start_task (GST_VIDEO_DECODER_SRC_PAD (self),
+        (GstTaskFunction) gst_omx_video_dec_loop, decoder, NULL);
+  }
+
   port = self->dec_in_port;
 
   size = gst_buffer_get_size (frame->input_buffer);
@@ -2637,7 +2644,10 @@ release_error:
 static GstFlowReturn
 gst_omx_video_dec_finish (GstVideoDecoder * decoder)
 {
-  return gst_omx_video_dec_drain (decoder, TRUE);
+  if (decoder->input_segment.rate > 0.0)
+    return gst_omx_video_dec_drain (decoder, TRUE);
+  else
+    return gst_omx_video_dec_drain (decoder, FALSE);
 }
 
 static GstFlowReturn
@@ -2645,7 +2655,7 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
 {
   GstOMXVideoDec *self;
   GstOMXVideoDecClass *klass;
-  GstOMXBuffer *buf;
+  GstOMXBuffer *buf = NULL;
   GstOMXAcquireBufferReturn acq_ret;
   OMX_ERRORTYPE err;
 
@@ -2670,7 +2680,7 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
   if (is_eos)
     self->eos = TRUE;
 
-  if ((klass->cdata.hacks & GST_OMX_HACK_NO_EMPTY_EOS_BUFFER)) {
+  if (!(klass->cdata.hacks & GST_OMX_HACK_NO_EMPTY_EOS_BUFFER)) {
     GST_WARNING_OBJECT (self, "Component does not support empty EOS buffers");
     return GST_FLOW_OK;
   }
