@@ -1255,6 +1255,7 @@ gst_omx_port_acquire_buffer (GstOMXPort * port, GstOMXBuffer ** buf)
   OMX_ERRORTYPE err;
   GstOMXBuffer *_buf = NULL;
   gint64 timeout = 40 * GST_MSECOND;
+  gint num_retries = 0;
 
   g_return_val_if_fail (port != NULL, GST_OMX_ACQUIRE_BUFFER_ERROR);
   g_return_val_if_fail (!port->tunneled, GST_OMX_ACQUIRE_BUFFER_ERROR);
@@ -1273,6 +1274,11 @@ retry:
    * make sure we don't do that again */
   if (timeout != 40 * GST_MSECOND )
     timeout = -2;
+
+  if (num_retries > 10) {
+    ret = GST_OMX_ACQUIRE_BUFFER_EOS;
+    goto done;
+  }
 
   /* Check if the component is in an error state */
   if ((err = comp->last_error) != OMX_ErrorNone) {
@@ -1381,6 +1387,7 @@ retry:
     gst_omx_component_wait_message (comp, timeout == -2 ? GST_SECOND : timeout);
 
     /* And now check everything again and maybe get a buffer */
+    num_retries++;
     goto retry;
   }
 

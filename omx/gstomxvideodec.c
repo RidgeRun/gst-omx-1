@@ -1620,7 +1620,7 @@ eos:
     self->downstream_flow_ret = flow_ret;
 
     /* Here we fallback and pause the task for the EOS case */
-    if (flow_ret != GST_FLOW_OK)
+    if (flow_ret != GST_FLOW_OK && !self->flush_flag)
       goto flow_error;
 
     GST_VIDEO_DECODER_STREAM_UNLOCK (self);
@@ -2666,8 +2666,8 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
 
   klass = GST_OMX_VIDEO_DEC_GET_CLASS (self);
 
-  if (!self->started) {
-    GST_DEBUG_OBJECT (self, "Component not started yet");
+  if (!self->started || self->flush_flag) {
+    GST_WARNING_OBJECT (self, "Component not started yet");
     return GST_FLOW_OK;
   }
   self->started = FALSE;
