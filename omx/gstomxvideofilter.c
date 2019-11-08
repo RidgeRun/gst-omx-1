@@ -635,7 +635,7 @@ gst_omx_video_filter_output_loop (GstPad * pad)
     return;
   }
 
-  acq_return = gst_omx_port_acquire_buffer (port, &buf);
+  acq_return = gst_omx_port_acquire_buffer (port, &buf, FALSE);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
     goto component_error;
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_FLUSHING) {
@@ -2172,7 +2172,7 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
       buf = omxmem->buf;
     }
 
-    acq_ret = gst_omx_port_acquire_buffer (port, &buf);
+    acq_ret = gst_omx_port_acquire_buffer (port, &buf, FALSE);
 
     if (acq_ret == GST_OMX_ACQUIRE_BUFFER_ERROR) {
       GST_OMX_VIDEO_FILTER_STREAM_LOCK (self);

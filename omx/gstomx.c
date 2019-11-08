@@ -1248,7 +1248,7 @@ gst_omx_port_compare_buffers (gconstpointer a, gconstpointer b)
  * If *buf is not NULL the buffer containing the given omx pointer
  * is going to be returned */
 GstOMXAcquireBufferReturn
-gst_omx_port_acquire_buffer (GstOMXPort * port, GstOMXBuffer ** buf)
+gst_omx_port_acquire_buffer (GstOMXPort * port, GstOMXBuffer ** buf, gboolean retry_limit)
 {
   GstOMXAcquireBufferReturn ret = GST_OMX_ACQUIRE_BUFFER_ERROR;
   GstOMXComponent *comp;
@@ -1275,7 +1275,7 @@ retry:
   if (timeout != 40 * GST_MSECOND )
     timeout = -2;
 
-  if (num_retries > 10) {
+  if (retry_limit && num_retries > 5) {
     ret = GST_OMX_ACQUIRE_BUFFER_EOS;
     goto done;
   }

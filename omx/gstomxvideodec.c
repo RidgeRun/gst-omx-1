@@ -1310,7 +1310,7 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
 
   GST_DEBUG_OBJECT (self, "Read frame from component");
 
-  acq_return = gst_omx_port_acquire_buffer (port, &buf);
+  acq_return = gst_omx_port_acquire_buffer (port, &buf, TRUE);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
     goto component_error;
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_FLUSHING) {
@@ -2420,7 +2420,7 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
      * _loop() can't call _finish_frame() and we might block forever
      * because no input buffers are released */
     GST_VIDEO_DECODER_STREAM_UNLOCK (self);
-    acq_ret = gst_omx_port_acquire_buffer (port, &buf);
+    acq_ret = gst_omx_port_acquire_buffer (port, &buf, FALSE);
 
     if (acq_ret == GST_OMX_ACQUIRE_BUFFER_ERROR) {
       GST_VIDEO_DECODER_STREAM_LOCK (self);
@@ -2694,7 +2694,7 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
   /* Send an EOS buffer to the component and let the base
    * class drop the EOS event. We will send it later when
    * the EOS buffer arrives on the output port. */
-  acq_ret = gst_omx_port_acquire_buffer (self->dec_in_port, &buf);
+  acq_ret = gst_omx_port_acquire_buffer (self->dec_in_port, &buf, FALSE);
   if (acq_ret != GST_OMX_ACQUIRE_BUFFER_OK) {
     GST_VIDEO_DECODER_STREAM_LOCK (self);
     GST_ERROR_OBJECT (self, "Failed to acquire buffer for draining: %d",
