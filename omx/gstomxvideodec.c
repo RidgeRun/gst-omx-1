@@ -2580,7 +2580,7 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (self, "Passed frame to component");
 
-  return  self->downstream_flow_ret;
+  return self->downstream_flow_ret;
 
 full_buffer:
   {
@@ -2595,7 +2595,7 @@ flow_error:
   {
     gst_video_codec_frame_unref (frame);
 
-    return  self->downstream_flow_ret;
+    return self->downstream_flow_ret;
   }
 
 too_large_codec_data:
@@ -2622,7 +2622,7 @@ flushing:
   {
     gst_video_codec_frame_unref (frame);
     GST_DEBUG_OBJECT (self, "Flushing -- returning FLUSHING");
-    return  GST_FLOW_FLUSHING;
+    return GST_FLOW_FLUSHING;
   }
 reconfigure_error:
   {
@@ -2666,7 +2666,7 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
   klass = GST_OMX_VIDEO_DEC_GET_CLASS (self);
 
   if (!self->started || self->flush_flag) {
-    GST_WARNING_OBJECT (self, "Component not started yet");
+    GST_DEBUG_OBJECT (self, "Component not started yet");
     return GST_FLOW_OK;
   }
   self->started = FALSE;
