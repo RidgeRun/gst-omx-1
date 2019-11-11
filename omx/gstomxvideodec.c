@@ -1588,7 +1588,7 @@ flushing:
       g_cond_broadcast (&self->drain_cond);
     }
     gst_pad_pause_task (GST_VIDEO_DECODER_SRC_PAD (self));
-    self->downstream_flow_ret = GST_FLOW_OK;//GST_FLOW_FLUSHING;
+    self->downstream_flow_ret = GST_FLOW_FLUSHING;
     self->started = FALSE;
     g_mutex_unlock (&self->drain_lock);
     return;
@@ -1654,7 +1654,6 @@ flow_error:
       }
       gst_pad_pause_task (GST_VIDEO_DECODER_SRC_PAD (self));
       self->started = FALSE;
-      self->downstream_flow_ret = GST_FLOW_OK;
       g_mutex_unlock (&self->drain_lock);
     }
     GST_VIDEO_DECODER_STREAM_UNLOCK (self);
@@ -2390,7 +2389,7 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
 
   if (self->downstream_flow_ret != GST_FLOW_OK) {
     gst_video_codec_frame_unref (frame);
-    return GST_FLOW_OK;//self->downstream_flow_ret;
+    return self->downstream_flow_ret;
   }
 
   if (klass->prepare_frame) {
@@ -2581,7 +2580,7 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (self, "Passed frame to component");
 
-  return  GST_FLOW_OK;//self->downstream_flow_ret;
+  return  self->downstream_flow_ret;
 
 full_buffer:
   {
@@ -2596,7 +2595,7 @@ flow_error:
   {
     gst_video_codec_frame_unref (frame);
 
-    return  GST_FLOW_OK;//self->downstream_flow_ret;
+    return  self->downstream_flow_ret;
   }
 
 too_large_codec_data:
@@ -2623,7 +2622,7 @@ flushing:
   {
     gst_video_codec_frame_unref (frame);
     GST_DEBUG_OBJECT (self, "Flushing -- returning FLUSHING");
-    return  GST_FLOW_OK;//GST_FLOW_FLUSHING;
+    return  GST_FLOW_FLUSHING;
   }
 reconfigure_error:
   {
