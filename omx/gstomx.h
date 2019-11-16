@@ -169,7 +169,9 @@ typedef enum {
   /* The port is EOS */
   GST_OMX_ACQUIRE_BUFFER_EOS,
   /* A fatal error happened */
-  GST_OMX_ACQUIRE_BUFFER_ERROR
+  GST_OMX_ACQUIRE_BUFFER_ERROR,
+  /* Custom return code */
+  GST_OMX_ACQUIRE_BUFFER_EMPTY,
 } GstOMXAcquireBufferReturn;
 
 struct _GstOMXCore {

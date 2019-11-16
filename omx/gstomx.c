@@ -1276,7 +1276,7 @@ retry:
     timeout = -2;
 
   if (retry_limit && num_retries > 5) {
-    ret = GST_OMX_ACQUIRE_BUFFER_EOS;
+    ret = GST_OMX_ACQUIRE_BUFFER_EMPTY;
     goto done;
   }
 
