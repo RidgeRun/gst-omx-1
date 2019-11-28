@@ -467,6 +467,7 @@ gst_rr_h264_parse_to_packetized (GstRrH264Parse * self, GstBuffer * buffer)
   gint32 state;
   const gint32 start_code = 0x00000001;
   gsize offset;
+  gboolean ret = TRUE;
 
   GST_DEBUG_OBJECT (self, "parsing byte-stream to avc");
 
@@ -535,6 +536,12 @@ gst_rr_h264_parse_to_packetized (GstRrH264Parse * self, GstBuffer * buffer)
     }
   }
 
+  if (0 == mark) {
+    GST_WARNING_OBJECT (self, "No valid IDR/I/P NAL detected");
+    ret = FALSE;
+    goto out;
+  }
+
   if (i == (size - 4)) {
     /* We reach the end of the buffer */
     if (curr_nal_type != -1) {
@@ -549,9 +556,10 @@ gst_rr_h264_parse_to_packetized (GstRrH264Parse * self, GstBuffer * buffer)
     }
   }
 
+ out:
   gst_buffer_unmap (buffer, &info);
 
-  return TRUE;
+  return ret;
 }
 
 static GstFlowReturn
@@ -568,7 +576,7 @@ gst_rr_h264_parse_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
 
   /* Change the buffer content to packetized */
   if (!gst_rr_h264_parse_to_packetized (self, buf))
-    return GST_FLOW_ERROR;
+    return GST_BASE_TRANSFORM_FLOW_DROPPED;
 
   return GST_FLOW_OK;
 }
