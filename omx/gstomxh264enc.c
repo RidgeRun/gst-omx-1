@@ -809,14 +809,6 @@ gst_omx_h264_enc_handle_output_frame (GstOMXVideoEnc * enc, GstOMXPort * port,
     self->force_idr = FALSE;
   }
 
-  if (buf->omx_buf->nFilledLen >= 4 &&
-      GST_READ_UINT32_BE (buf->omx_buf->pBuffer +
-			  buf->omx_buf->nOffset) != 0x00000001) {
-    GST_WARNING_OBJECT (self, "Duplicate frame found dropping");
-    buf->omx_buf->nFilledLen = 0;
-    frame->output_buffer = NULL;
-  }
-
   return
       GST_OMX_VIDEO_ENC_CLASS
       (gst_omx_h264_enc_parent_class)->handle_output_frame (enc, port, buf,
