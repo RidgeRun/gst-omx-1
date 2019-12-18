@@ -650,6 +650,8 @@ FillBufferDone (OMX_HANDLETYPE hComponent, OMX_PTR pAppData,
 
   comp = buf->port->comp;
 
+  MEMUTILS_cacheWb(buf->omx_buf->pBuffer, buf->omx_buf->nFilledLen);
+
   msg = g_slice_new (GstOMXMessage);
   msg->type = GST_OMX_MESSAGE_BUFFER_DONE;
   msg->content.buffer_done.component = hComponent;
@@ -2708,6 +2710,7 @@ _class_init (gpointer g_class, gpointer data)
     class_data->hacks = gst_omx_parse_hacks (hacks);
     g_strfreev (hacks);
   }
+  CMEM_init();
 }
 
 static gboolean
