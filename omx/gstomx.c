@@ -1257,7 +1257,7 @@ gst_omx_port_acquire_buffer (GstOMXPort * port, GstOMXBuffer ** buf)
   GstOMXComponent *comp;
   OMX_ERRORTYPE err;
   GstOMXBuffer *_buf = NULL;
-  gint64 timeout = GST_SECOND;
+  gint64 timeout = 40 * GST_MSECOND;
 
   g_return_val_if_fail (port != NULL, GST_OMX_ACQUIRE_BUFFER_ERROR);
   g_return_val_if_fail (!port->tunneled, GST_OMX_ACQUIRE_BUFFER_ERROR);
@@ -1274,7 +1274,7 @@ retry:
 
   /* If we are in the case where we waited for a buffer after EOS,
    * make sure we don't do that again */
-  if (timeout != GST_SECOND)
+  if (timeout != 40 * GST_MSECOND )
     timeout = -2;
 
   /* Check if the component is in an error state */
