@@ -200,12 +200,12 @@ gst_omx_video_enc_class_init (GstOMXVideoEncClass * klass)
   g_object_class_install_property (gobject_class, PROP_OUTPUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
           "The amount of OMX output buffers",
-          1, 16, GST_OMX_VIDEO_ENC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          1, 32, GST_OMX_VIDEO_ENC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_INPUT_BUFFERS,
       g_param_spec_uint ("input-buffers", "Input buffers",
           "The amount of OMX input buffers",
-          1, 16, GST_OMX_VIDEO_ENC_INPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          1, 32, GST_OMX_VIDEO_ENC_INPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 
   element_class->change_state =
       GST_DEBUG_FUNCPTR (gst_omx_video_enc_change_state);
