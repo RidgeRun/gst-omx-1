@@ -69,6 +69,8 @@ struct _GstOMXVideoFilterPrivate
   gboolean drained;
   /* TRUE if we are using upstream input buffers */
   gboolean sharing;
+  gboolean flush_flag;
+  gboolean dropping;
   GstFlowReturn downstream_flow_ret;
 
 };
@@ -350,6 +352,8 @@ gst_omx_video_filter_init (GstOMXVideoFilter * self,
   priv->output_pool = NULL;
   priv->started = FALSE;
   priv->sharing = FALSE;
+  priv->flush_flag = FALSE;
+  priv->dropping = FALSE;
 
   self->out_port = NULL;
 
@@ -397,7 +401,7 @@ gst_omx_video_filter_finish_frame (GstOMXVideoFilter * self, GstPad * srcpad,
   GST_OMX_VIDEO_FILTER_STREAM_LOCK (self);
 
   /* no buffer data means this frame is skipped/dropped */
-  if (!frame->output_buffer) {
+  if (!frame->output_buffer || priv->dropping ) {
     GST_DEBUG_OBJECT (self, "skipping frame %" GST_TIME_FORMAT,
         GST_TIME_ARGS (frame->pts));
     goto done;
@@ -614,11 +618,22 @@ gst_omx_video_filter_output_loop (GstPad * pad)
   GstFlowReturn flow_ret = GST_FLOW_OK;
   GstOMXAcquireBufferReturn acq_return;
   OMX_ERRORTYPE err;
+  gboolean flush_flag;
 
   self = GST_OMX_VIDEO_FILTER (gst_pad_get_parent (pad));
   priv = self->priv;
   klass = GST_OMX_VIDEO_FILTER_GET_CLASS (self);
   port = (GstOMXPort *) gst_pad_get_element_private (pad);
+
+  GST_OMX_VIDEO_FILTER_STREAM_LOCK (self);
+  flush_flag = priv->flush_flag;
+  GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+
+  if (flush_flag) {
+    GST_DEBUG_OBJECT (self, "Got frame after flush start");
+    priv->downstream_flow_ret = GST_FLOW_OK;
+    return;
+  }
 
   acq_return = gst_omx_port_acquire_buffer (port, &buf);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
@@ -679,6 +694,7 @@ component_error:
     gst_pad_pause_task (pad);
     priv->downstream_flow_ret = GST_FLOW_ERROR;
     priv->started = FALSE;
+    priv->sharing = FALSE;
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
     return;
@@ -688,7 +704,6 @@ flushing:
     GST_DEBUG_OBJECT (self, "Flushing -- stopping task");
     gst_pad_pause_task (pad);
     priv->downstream_flow_ret = GST_FLOW_FLUSHING;
-    priv->started = FALSE;
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
     return;
@@ -708,7 +723,10 @@ flow_error:
       gst_pad_push_event (pad, gst_event_new_eos ());
       gst_pad_pause_task (pad);
     }
-    priv->started = FALSE;
+    if (priv->downstream_flow_ret != GST_FLOW_FLUSHING) {
+      priv->started = FALSE;
+      priv->sharing = FALSE;
+    }
     GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
@@ -723,6 +741,7 @@ release_error:
     gst_pad_pause_task (pad);
     priv->downstream_flow_ret = GST_FLOW_ERROR;
     priv->started = FALSE;
+    priv->sharing = FALSE;
     GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
@@ -1478,6 +1497,7 @@ gst_omx_video_filter_sink_event (GstPad * pad, GstObject * parent,
     GstEvent * event)
 {
   GstOMXVideoFilter *self = GST_OMX_VIDEO_FILTER (parent);
+  GstOMXVideoFilterPrivate *priv = self->priv;
   gboolean ret = FALSE;
 
   switch (GST_EVENT_TYPE (event)) {
@@ -1492,6 +1512,23 @@ gst_omx_video_filter_sink_event (GstPad * pad, GstObject * parent,
     }
     default:
       ret = gst_pad_event_default (pad, parent, event);
+      break;
+  }
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_FLUSH_START:
+      priv->flush_flag = TRUE;
+      priv->dropping =TRUE;
+      priv->downstream_flow_ret = GST_FLOW_OK;
+      break;
+    case GST_EVENT_FLUSH_STOP:
+      priv->flush_flag = FALSE;
+      priv->downstream_flow_ret = GST_FLOW_OK;
+      break;
+    case GST_EVENT_SEGMENT:
+      priv->dropping = FALSE;
+      break;
+    default:
       break;
   }
 
@@ -2058,6 +2095,12 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
   GstOMXAcquireBufferReturn acq_ret = GST_OMX_ACQUIRE_BUFFER_ERROR;
 
   GST_LOG_OBJECT (self, "Handle frame");
+
+  if (priv->flush_flag) {
+    GST_DEBUG_OBJECT (self, "Got frame after flush start");
+    gst_video_codec_frame_unref (frame);
+    return GST_FLOW_OK;
+  }
 
   if (priv->downstream_flow_ret != GST_FLOW_OK) {
     gst_video_codec_frame_unref (frame);

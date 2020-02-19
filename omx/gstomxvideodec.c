@@ -2811,8 +2811,7 @@ gst_omx_video_dec_sink_event (GstVideoDecoder * decoder, GstEvent * event)
       self->flush_flag = TRUE;
       self->started = FALSE;
       self->downstream_flow_ret = GST_FLOW_OK;
-      /* Stop srcpad task */
-      gst_pad_stop_task (GST_VIDEO_DECODER_SRC_PAD (self));
+
       /* Flush omx ports */
       gst_omx_port_set_flushing (self->dec_in_port, 5 * GST_SECOND, TRUE);
       gst_omx_port_set_flushing (self->dec_out_port, 5 * GST_SECOND, TRUE);
