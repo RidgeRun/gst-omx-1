@@ -618,18 +618,13 @@ gst_omx_video_filter_output_loop (GstPad * pad)
   GstFlowReturn flow_ret = GST_FLOW_OK;
   GstOMXAcquireBufferReturn acq_return;
   OMX_ERRORTYPE err;
-  gboolean flush_flag;
 
   self = GST_OMX_VIDEO_FILTER (gst_pad_get_parent (pad));
   priv = self->priv;
   klass = GST_OMX_VIDEO_FILTER_GET_CLASS (self);
   port = (GstOMXPort *) gst_pad_get_element_private (pad);
 
-  GST_OMX_VIDEO_FILTER_STREAM_LOCK (self);
-  flush_flag = priv->flush_flag;
-  GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
-
-  if (flush_flag) {
+  if (priv->flush_flag) {
     GST_DEBUG_OBJECT (self, "Got frame after flush start");
     priv->downstream_flow_ret = GST_FLOW_OK;
     return;
