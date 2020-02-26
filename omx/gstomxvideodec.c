@@ -1290,6 +1290,7 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
   GstOMXAcquireBufferReturn acq_return;
   GstClockTimeDiff deadline;
   OMX_ERRORTYPE err;
+  gboolean flush_flag;
 
 #if defined (USE_OMX_TARGET_RPI) && defined (HAVE_GST_GL)
   port = self->eglimage ? self->egl_out_port : self->dec_out_port;
@@ -1297,7 +1298,11 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
   port = self->dec_out_port;
 #endif
 
-  if (self->flush_flag) {
+  GST_VIDEO_DECODER_STREAM_LOCK (self);
+  flush_flag = self->flush_flag;
+  GST_VIDEO_DECODER_STREAM_UNLOCK (self);
+
+  if (flush_flag) {
     GST_DEBUG_OBJECT (self, "Got frame after flush start");
     self->downstream_flow_ret = GST_FLOW_OK;
     return;
@@ -2351,13 +2356,18 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
   guint offset = 0, size;
   GstClockTime timestamp, duration;
   OMX_ERRORTYPE err;
+  gboolean flush_flag;
 
   self = GST_OMX_VIDEO_DEC (decoder);
   klass = GST_OMX_VIDEO_DEC_GET_CLASS (self);
 
   GST_DEBUG_OBJECT (self, "Handling frame");
 
-  if (self->flush_flag) {
+  GST_VIDEO_DECODER_STREAM_LOCK (self);
+  flush_flag = self->flush_flag;
+  GST_VIDEO_DECODER_STREAM_UNLOCK (self);
+
+  if (flush_flag) {
     GST_DEBUG_OBJECT (self, "Got frame after flush start");
     gst_video_codec_frame_unref (frame);
     return GST_FLOW_OK;
