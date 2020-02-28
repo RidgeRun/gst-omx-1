@@ -1600,12 +1600,15 @@ eos:
   {
     g_mutex_lock (&self->drain_lock);
     if (self->draining) {
-      GstQuery *query = gst_query_new_drain ();
-
-      /* Drain the pipeline to reclaim all memories back to the pool */
-      if (!gst_pad_peer_query (GST_VIDEO_DECODER_SRC_PAD (self), query))
-        GST_DEBUG_OBJECT (self, "drain query failed");
-      gst_query_unref (query);
+      /* In reverse playback, we just need to confirm the component has processed
+         the given block of buffers */
+      if (GST_VIDEO_DECODER(self)->input_segment.rate > 0.0) {
+        GstQuery *query = gst_query_new_drain ();
+        /* Drain the pipeline to reclaim all memories back to the pool */
+        if (!gst_pad_peer_query (GST_VIDEO_DECODER_SRC_PAD (self), query))
+          GST_DEBUG_OBJECT (self, "drain query failed");
+        gst_query_unref (query);
+      }
 
       GST_DEBUG_OBJECT (self, "Drained");
       self->draining = FALSE;
@@ -2832,6 +2835,13 @@ gst_omx_video_dec_sink_event (GstVideoDecoder * decoder, GstEvent * event)
         gst_omx_component_set_state (self->dec, OMX_StatePause);
         gst_omx_component_get_state (self->dec, GST_CLOCK_TIME_NONE);
       }
+      /* If this event arrives in the middle of a draining call, unlock it */
+      g_mutex_lock (&self->drain_lock);
+      if (self->draining) {
+        self->draining = FALSE;
+        g_cond_broadcast (&self->drain_cond);
+      }
+      g_mutex_unlock (&self->drain_lock);
       break;
     case GST_EVENT_FLUSH_STOP:
       /* (Re)Send omx component to executing state */
