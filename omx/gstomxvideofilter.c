@@ -362,6 +362,8 @@ gst_omx_video_filter_init (GstOMXVideoFilter * self,
   self->output_buffers = GST_OMX_VIDEO_FILTER_OUTPUT_BUFFERS_DEFAULT;
 
   g_rec_mutex_init (&self->stream_lock);
+  g_mutex_init (&self->filter_lock);
+  g_cond_init (&self->filter_cond);
   gst_omx_video_filter_reset (self);
 }
 
@@ -437,6 +439,10 @@ done:
   gst_video_codec_frame_unref (frame);
 
   GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+
+  g_mutex_lock (&self->filter_lock);
+  g_cond_signal (&self->filter_cond);
+  g_mutex_unlock (&self->filter_lock);
 
   return ret;
 }
@@ -692,6 +698,11 @@ component_error:
     priv->sharing = FALSE;
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
+
+    g_mutex_lock (&self->filter_lock);
+    g_cond_signal (&self->filter_cond);
+    g_mutex_unlock (&self->filter_lock);
+
     return;
   }
 flushing:
@@ -701,6 +712,11 @@ flushing:
     priv->downstream_flow_ret = GST_FLOW_FLUSHING;
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
+
+    g_mutex_lock (&self->filter_lock);
+    g_cond_signal (&self->filter_cond);
+    g_mutex_unlock (&self->filter_lock);
+
     return;
   }
 
@@ -911,6 +927,8 @@ gst_omx_video_filter_finalize (GObject * object)
   GST_LOG_OBJECT (self, "finalize");
 
   g_rec_mutex_clear (&self->stream_lock);
+  g_mutex_clear (&self->filter_lock);
+  g_cond_clear (&self->filter_cond);
   if (self->srcpads) {
     g_list_free (self->srcpads);
   }
@@ -2222,6 +2240,13 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
       goto release_error;
 
     GST_LOG_OBJECT (self, "Passed frame to component");
+
+    /* Wait until this frame has been pushed downstream */
+    g_mutex_lock (&self->filter_lock);
+    GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+    g_cond_wait (&self->filter_cond, &self->filter_lock);
+    g_mutex_unlock (&self->filter_lock);
+    GST_OMX_VIDEO_FILTER_STREAM_LOCK (self);
   }
 
   gst_video_codec_frame_unref (frame);

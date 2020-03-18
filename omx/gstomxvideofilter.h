@@ -85,6 +85,9 @@ struct _GstOMXVideoFilter
   GstOMXVideoFilterPrivate *priv;
 
   void *padding[GST_PADDING_LARGE];
+
+  GMutex filter_lock;
+  GCond filter_cond;
 };
 
 /**
