@@ -440,6 +440,7 @@ done:
 
   GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
 
+  /* Once the buffer has been pushed, unblock the stream to receive next buffer */
   g_mutex_lock (&self->filter_lock);
   g_cond_signal (&self->filter_cond);
   g_mutex_unlock (&self->filter_lock);
@@ -699,6 +700,7 @@ component_error:
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
 
+    /* Make sure the stream gets unblocked to prevent a deadlock */
     g_mutex_lock (&self->filter_lock);
     g_cond_signal (&self->filter_cond);
     g_mutex_unlock (&self->filter_lock);
@@ -713,6 +715,7 @@ flushing:
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
 
+    /* Make sure the stream gets unblocked to prevent a deadlock */
     g_mutex_lock (&self->filter_lock);
     g_cond_signal (&self->filter_cond);
     g_mutex_unlock (&self->filter_lock);
