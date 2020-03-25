@@ -125,7 +125,7 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
   g_object_class_install_property (gobject_class, PROP_OUTPUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
           "The amount of OMX output buffers",
-          1, 16, GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
+          1, 32, GST_OMX_VIDEO_DEC_OUTPUT_BUFFERS_DEFAULT, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_INPUT_BUFFERS,
       g_param_spec_uint ("input-buffers", "Input buffers",
@@ -1310,13 +1310,15 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
 
   GST_DEBUG_OBJECT (self, "Read frame from component");
 
-  acq_return = gst_omx_port_acquire_buffer (port, &buf);
+  acq_return = gst_omx_port_acquire_buffer (port, &buf, TRUE);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
     goto component_error;
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_FLUSHING) {
     goto flushing;
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_EOS) {
     goto eos;
+  } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_EMPTY) {
+    return;
   }
 
   if (!gst_pad_has_current_caps (GST_VIDEO_DECODER_SRC_PAD (self)) ||
@@ -1598,12 +1600,15 @@ eos:
   {
     g_mutex_lock (&self->drain_lock);
     if (self->draining) {
-      GstQuery *query = gst_query_new_drain ();
-
-      /* Drain the pipeline to reclaim all memories back to the pool */
-      if (!gst_pad_peer_query (GST_VIDEO_DECODER_SRC_PAD (self), query))
-        GST_DEBUG_OBJECT (self, "drain query failed");
-      gst_query_unref (query);
+      /* In reverse playback, we just need to confirm the component has processed
+         the given block of buffers */
+      if (GST_VIDEO_DECODER(self)->input_segment.rate > 0.0) {
+        GstQuery *query = gst_query_new_drain ();
+        /* Drain the pipeline to reclaim all memories back to the pool */
+        if (!gst_pad_peer_query (GST_VIDEO_DECODER_SRC_PAD (self), query))
+          GST_DEBUG_OBJECT (self, "drain query failed");
+        gst_query_unref (query);
+      }
 
       GST_DEBUG_OBJECT (self, "Drained");
       self->draining = FALSE;
@@ -1620,7 +1625,7 @@ eos:
     self->downstream_flow_ret = flow_ret;
 
     /* Here we fallback and pause the task for the EOS case */
-    if (flow_ret != GST_FLOW_OK)
+    if (flow_ret != GST_FLOW_OK && !self->flush_flag)
       goto flow_error;
 
     GST_VIDEO_DECODER_STREAM_UNLOCK (self);
@@ -2404,6 +2409,13 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
     }
   }
 
+  if (gst_pad_get_task_state (GST_VIDEO_DECODER_SRC_PAD (self)) !=
+      GST_TASK_STARTED) {
+    GST_DEBUG_OBJECT (self, "Restarting task");
+    gst_pad_start_task (GST_VIDEO_DECODER_SRC_PAD (self),
+        (GstTaskFunction) gst_omx_video_dec_loop, decoder, NULL);
+  }
+
   port = self->dec_in_port;
 
   size = gst_buffer_get_size (frame->input_buffer);
@@ -2412,7 +2424,7 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
      * _loop() can't call _finish_frame() and we might block forever
      * because no input buffers are released */
     GST_VIDEO_DECODER_STREAM_UNLOCK (self);
-    acq_ret = gst_omx_port_acquire_buffer (port, &buf);
+    acq_ret = gst_omx_port_acquire_buffer (port, &buf, FALSE);
 
     if (acq_ret == GST_OMX_ACQUIRE_BUFFER_ERROR) {
       GST_VIDEO_DECODER_STREAM_LOCK (self);
@@ -2637,7 +2649,10 @@ release_error:
 static GstFlowReturn
 gst_omx_video_dec_finish (GstVideoDecoder * decoder)
 {
-  return gst_omx_video_dec_drain (decoder, TRUE);
+  if (decoder->input_segment.rate > 0.0)
+    return gst_omx_video_dec_drain (decoder, TRUE);
+  else
+    return gst_omx_video_dec_drain (decoder, FALSE);
 }
 
 static GstFlowReturn
@@ -2645,7 +2660,7 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
 {
   GstOMXVideoDec *self;
   GstOMXVideoDecClass *klass;
-  GstOMXBuffer *buf;
+  GstOMXBuffer *buf = NULL;
   GstOMXAcquireBufferReturn acq_ret;
   OMX_ERRORTYPE err;
 
@@ -2655,7 +2670,7 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
 
   klass = GST_OMX_VIDEO_DEC_GET_CLASS (self);
 
-  if (!self->started) {
+  if (!self->started || self->flush_flag) {
     GST_DEBUG_OBJECT (self, "Component not started yet");
     return GST_FLOW_OK;
   }
@@ -2670,7 +2685,7 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
   if (is_eos)
     self->eos = TRUE;
 
-  if ((klass->cdata.hacks & GST_OMX_HACK_NO_EMPTY_EOS_BUFFER)) {
+  if (!(klass->cdata.hacks & GST_OMX_HACK_NO_EMPTY_EOS_BUFFER)) {
     GST_WARNING_OBJECT (self, "Component does not support empty EOS buffers");
     return GST_FLOW_OK;
   }
@@ -2683,7 +2698,7 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
   /* Send an EOS buffer to the component and let the base
    * class drop the EOS event. We will send it later when
    * the EOS buffer arrives on the output port. */
-  acq_ret = gst_omx_port_acquire_buffer (self->dec_in_port, &buf);
+  acq_ret = gst_omx_port_acquire_buffer (self->dec_in_port, &buf, FALSE);
   if (acq_ret != GST_OMX_ACQUIRE_BUFFER_OK) {
     GST_VIDEO_DECODER_STREAM_LOCK (self);
     GST_ERROR_OBJECT (self, "Failed to acquire buffer for draining: %d",
@@ -2820,6 +2835,13 @@ gst_omx_video_dec_sink_event (GstVideoDecoder * decoder, GstEvent * event)
         gst_omx_component_set_state (self->dec, OMX_StatePause);
         gst_omx_component_get_state (self->dec, GST_CLOCK_TIME_NONE);
       }
+      /* If this event arrives in the middle of a draining call, unlock it */
+      g_mutex_lock (&self->drain_lock);
+      if (self->draining) {
+        self->draining = FALSE;
+        g_cond_broadcast (&self->drain_cond);
+      }
+      g_mutex_unlock (&self->drain_lock);
       break;
     case GST_EVENT_FLUSH_STOP:
       /* (Re)Send omx component to executing state */

@@ -345,9 +345,6 @@ gst_omx_component_handle_messages (GstOMXComponent * comp)
 
         GST_DEBUG_OBJECT (comp->parent, "%s port %u got buffer flags 0x%08x",
             comp->name, port->index, (guint) flags);
-        if ((flags & OMX_BUFFERFLAG_EOS)
-            && port->port_def.eDir == OMX_DirOutput)
-          port->eos = TRUE;
 
         break;
       }
@@ -1249,15 +1246,22 @@ gst_omx_port_compare_buffers (gconstpointer a, gconstpointer b)
 
 /* NOTE: Uses comp->lock and comp->messages_lock
  * If *buf is not NULL the buffer containing the given omx pointer
- * is going to be returned */
+ * is going to be returned.
+ * The retry_limit argument was introduced for reverse playback, in that case the video decoder
+ * component gets drained constantly and there's a chance that the loop task on the output port
+ * tries to acquire a buffer when the component is empty, we can't retry to get a buffer indefinetly
+ * because in reverse playback another buffer will never arrive and the loop task can't be locked
+ * indefinetly. This feature is optional and currently activated only by the video decoder.
+ */
 GstOMXAcquireBufferReturn
-gst_omx_port_acquire_buffer (GstOMXPort * port, GstOMXBuffer ** buf)
+gst_omx_port_acquire_buffer (GstOMXPort * port, GstOMXBuffer ** buf, gboolean retry_limit)
 {
   GstOMXAcquireBufferReturn ret = GST_OMX_ACQUIRE_BUFFER_ERROR;
   GstOMXComponent *comp;
   OMX_ERRORTYPE err;
   GstOMXBuffer *_buf = NULL;
-  gint64 timeout = 40 * GST_MSECOND;
+  gint64 timeout = GST_OMX_MAX_TIMEOUT;
+  gint num_retries = 0;
 
   g_return_val_if_fail (port != NULL, GST_OMX_ACQUIRE_BUFFER_ERROR);
   g_return_val_if_fail (!port->tunneled, GST_OMX_ACQUIRE_BUFFER_ERROR);
@@ -1274,8 +1278,13 @@ retry:
 
   /* If we are in the case where we waited for a buffer after EOS,
    * make sure we don't do that again */
-  if (timeout != 40 * GST_MSECOND )
+  if (timeout != GST_OMX_MAX_TIMEOUT )
     timeout = -2;
+
+  if (retry_limit && num_retries > GST_OMX_MAX_NUM_RETRIES) {
+    ret = GST_OMX_ACQUIRE_BUFFER_EMPTY;
+    goto done;
+  }
 
   /* Check if the component is in an error state */
   if ((err = comp->last_error) != OMX_ErrorNone) {
@@ -1384,6 +1393,7 @@ retry:
     gst_omx_component_wait_message (comp, timeout == -2 ? GST_SECOND : timeout);
 
     /* And now check everything again and maybe get a buffer */
+    num_retries++;
     goto retry;
   }
 

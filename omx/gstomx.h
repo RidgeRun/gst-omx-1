@@ -150,6 +150,8 @@ G_BEGIN_DECLS
 #define GST_OMX_AUDIO_ENC_INBUF_SIZE 4096
 #define GST_OMX_AUDIO_ENC_OUTBUF_SIZE 4608
 #define GST_OMX_AAC_ENC_INBUF_NSAMPLES 1024
+#define GST_OMX_MAX_NUM_RETRIES 5
+#define GST_OMX_MAX_TIMEOUT 40 * GST_MSECOND
 
 typedef struct _GstOMXCore GstOMXCore;
 typedef struct _GstOMXPort GstOMXPort;
@@ -169,7 +171,9 @@ typedef enum {
   /* The port is EOS */
   GST_OMX_ACQUIRE_BUFFER_EOS,
   /* A fatal error happened */
-  GST_OMX_ACQUIRE_BUFFER_ERROR
+  GST_OMX_ACQUIRE_BUFFER_ERROR,
+  /* Custom return code */
+  GST_OMX_ACQUIRE_BUFFER_EMPTY,
 } GstOMXAcquireBufferReturn;
 
 struct _GstOMXCore {
@@ -368,7 +372,7 @@ OMX_ERRORTYPE     gst_omx_close_tunnel (GstOMXPort * port1, GstOMXPort * port2);
 OMX_ERRORTYPE     gst_omx_port_get_port_definition (GstOMXPort * port, OMX_PARAM_PORTDEFINITIONTYPE * port_def);
 OMX_ERRORTYPE     gst_omx_port_update_port_definition (GstOMXPort *port, OMX_PARAM_PORTDEFINITIONTYPE *port_definition);
 
-GstOMXAcquireBufferReturn gst_omx_port_acquire_buffer (GstOMXPort *port, GstOMXBuffer **buf);
+GstOMXAcquireBufferReturn gst_omx_port_acquire_buffer (GstOMXPort *port, GstOMXBuffer **buf, gboolean retry_limit);
 OMX_ERRORTYPE     gst_omx_port_release_buffer (GstOMXPort *port, GstOMXBuffer *buf);
 
 OMX_ERRORTYPE     gst_omx_port_set_flushing (GstOMXPort *port, GstClockTime timeout, gboolean flush);

@@ -251,7 +251,7 @@ gst_omx_video_filter_class_init (GstOMXVideoFilterClass * klass)
   g_object_class_install_property (gobject_class, PROP_OUTPUT_BUFFERS,
       g_param_spec_uint ("output-buffers", "Output buffers",
           "The amount of OMX output buffers",
-          1, 16, GST_OMX_VIDEO_FILTER_OUTPUT_BUFFERS_DEFAULT,
+          1, 22, GST_OMX_VIDEO_FILTER_OUTPUT_BUFFERS_DEFAULT,
           G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_INPUT_BUFFERS,
@@ -362,6 +362,8 @@ gst_omx_video_filter_init (GstOMXVideoFilter * self,
   self->output_buffers = GST_OMX_VIDEO_FILTER_OUTPUT_BUFFERS_DEFAULT;
 
   g_rec_mutex_init (&self->stream_lock);
+  g_mutex_init (&self->filter_lock);
+  g_cond_init (&self->filter_cond);
   gst_omx_video_filter_reset (self);
 }
 
@@ -437,6 +439,11 @@ done:
   gst_video_codec_frame_unref (frame);
 
   GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+
+  /* Once the buffer has been pushed, unblock the stream to receive next buffer */
+  g_mutex_lock (&self->filter_lock);
+  g_cond_signal (&self->filter_cond);
+  g_mutex_unlock (&self->filter_lock);
 
   return ret;
 }
@@ -591,9 +598,16 @@ gst_omx_video_filter_handle_output_frame (GstOMXVideoFilter * self,
     } else {
       GST_ERROR_OBJECT (self, "No corresponding frame found");
       flow_ret = gst_pad_push (srcpad, outbuf);
+      g_mutex_lock (&self->filter_lock);
+      g_cond_signal (&self->filter_cond);
+      g_mutex_unlock (&self->filter_lock);
     }
   } else if (frame != NULL) {
     flow_ret = gst_omx_video_filter_finish_frame (self, srcpad, frame);
+  } else {
+    g_mutex_lock (&self->filter_lock);
+    g_cond_signal (&self->filter_cond);
+    g_mutex_unlock (&self->filter_lock);
   }
 
   return flow_ret;
@@ -602,6 +616,9 @@ invalid_buffer:
   {
     GST_ELEMENT_ERROR (self, LIBRARY, SETTINGS, (NULL),
         ("Cannot acquire output buffer from pool"));
+    g_mutex_lock (&self->filter_lock);
+    g_cond_signal (&self->filter_cond);
+    g_mutex_unlock (&self->filter_lock);
     return flow_ret;
   }
 }
@@ -618,24 +635,22 @@ gst_omx_video_filter_output_loop (GstPad * pad)
   GstFlowReturn flow_ret = GST_FLOW_OK;
   GstOMXAcquireBufferReturn acq_return;
   OMX_ERRORTYPE err;
-  gboolean flush_flag;
 
   self = GST_OMX_VIDEO_FILTER (gst_pad_get_parent (pad));
   priv = self->priv;
   klass = GST_OMX_VIDEO_FILTER_GET_CLASS (self);
   port = (GstOMXPort *) gst_pad_get_element_private (pad);
 
-  GST_OMX_VIDEO_FILTER_STREAM_LOCK (self);
-  flush_flag = priv->flush_flag;
-  GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
-
-  if (flush_flag) {
+  if (priv->flush_flag) {
     GST_DEBUG_OBJECT (self, "Got frame after flush start");
     priv->downstream_flow_ret = GST_FLOW_OK;
+    g_mutex_lock (&self->filter_lock);
+    g_cond_signal (&self->filter_cond);
+    g_mutex_unlock (&self->filter_lock);
     return;
   }
 
-  acq_return = gst_omx_port_acquire_buffer (port, &buf);
+  acq_return = gst_omx_port_acquire_buffer (port, &buf, FALSE);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
     goto component_error;
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_FLUSHING) {
@@ -643,6 +658,9 @@ gst_omx_video_filter_output_loop (GstPad * pad)
   } else if (acq_return != GST_OMX_ACQUIRE_BUFFER_OK) {
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
+    g_mutex_lock (&self->filter_lock);
+    g_cond_signal (&self->filter_cond);
+    g_mutex_unlock (&self->filter_lock);
     return;
   }
   /* This prevents a deadlock between the srcpad stream
@@ -697,6 +715,12 @@ component_error:
     priv->sharing = FALSE;
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
+
+    /* Make sure the stream gets unblocked to prevent a deadlock */
+    g_mutex_lock (&self->filter_lock);
+    g_cond_signal (&self->filter_cond);
+    g_mutex_unlock (&self->filter_lock);
+
     return;
   }
 flushing:
@@ -706,6 +730,12 @@ flushing:
     priv->downstream_flow_ret = GST_FLOW_FLUSHING;
     /* The gst_pad_get_parent function increases the refcount of the parent object */
     gst_object_unref (self);
+
+    /* Make sure the stream gets unblocked to prevent a deadlock */
+    g_mutex_lock (&self->filter_lock);
+    g_cond_signal (&self->filter_cond);
+    g_mutex_unlock (&self->filter_lock);
+
     return;
   }
 
@@ -916,6 +946,8 @@ gst_omx_video_filter_finalize (GObject * object)
   GST_LOG_OBJECT (self, "finalize");
 
   g_rec_mutex_clear (&self->stream_lock);
+  g_mutex_clear (&self->filter_lock);
+  g_cond_clear (&self->filter_cond);
   if (self->srcpads) {
     g_list_free (self->srcpads);
   }
@@ -2172,7 +2204,7 @@ gst_omx_video_filter_handle_frame (GstOMXVideoFilter * self,
       buf = omxmem->buf;
     }
 
-    acq_ret = gst_omx_port_acquire_buffer (port, &buf);
+    acq_ret = gst_omx_port_acquire_buffer (port, &buf, FALSE);
 
     if (acq_ret == GST_OMX_ACQUIRE_BUFFER_ERROR) {
       GST_OMX_VIDEO_FILTER_STREAM_LOCK (self);
@@ -2342,7 +2374,11 @@ gst_omx_video_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   priv->drained = FALSE;
   ret = gst_omx_video_filter_handle_frame (self, frame);
 
+  /* Wait until this frame has been pushed downstream */
+  g_mutex_lock (&self->filter_lock);
   GST_OMX_VIDEO_FILTER_STREAM_UNLOCK (self);
+  g_cond_wait (&self->filter_cond, &self->filter_lock);
+  g_mutex_unlock (&self->filter_lock);
 
   return ret;
 }

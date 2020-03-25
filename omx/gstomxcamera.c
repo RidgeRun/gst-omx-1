@@ -873,7 +873,7 @@ gst_omx_camera_get_buffer (GstOMXCamera * self, GstBuffer ** outbuf)
   port = self->outport;
   pool = self->outpool;
 
-  acq_return = gst_omx_port_acquire_buffer (port, &buf);
+  acq_return = gst_omx_port_acquire_buffer (port, &buf, FALSE);
   if (acq_return == GST_OMX_ACQUIRE_BUFFER_ERROR) {
     goto component_error;
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_FLUSHING) {

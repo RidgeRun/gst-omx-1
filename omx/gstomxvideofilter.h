@@ -85,6 +85,14 @@ struct _GstOMXVideoFilter
   GstOMXVideoFilterPrivate *priv;
 
   void *padding[GST_PADDING_LARGE];
+
+  /* Blocks the video stream to follow the sink element data processing,
+   * so this element will process only one buffer at the time and will prevent
+   * other components such as the decoder from becoming unresponsive in case
+   * of processing more data than required in sensitive operations like reverse playback.
+   */
+  GMutex filter_lock;
+  GCond filter_cond;
 };
 
 /**
