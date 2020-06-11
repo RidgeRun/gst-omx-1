@@ -2639,10 +2639,8 @@ release_error:
 static GstFlowReturn
 gst_omx_video_dec_finish (GstVideoDecoder * decoder)
 {
-  if (decoder->input_segment.rate > 0.0)
-    return gst_omx_video_dec_drain (decoder, TRUE);
-  else
-    return gst_omx_video_dec_drain (decoder, FALSE);
+  /* Drain without EOS flag to keep using the stream if needed */
+  return gst_omx_video_dec_drain (decoder, FALSE);
 }
 
 static GstFlowReturn
