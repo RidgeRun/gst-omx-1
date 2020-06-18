@@ -1059,8 +1059,10 @@ gst_omx_audio_dec_handle_frame (GstAudioDecoder * decoder, GstBuffer * inbuf)
   GST_DEBUG_OBJECT (self, "Handling frame");
 
   if (self->downstream_flow_ret != GST_FLOW_OK) {
-    if (self->downstream_flow_ret == GST_FLOW_FLUSHING) {
+    if (self->downstream_flow_ret == GST_FLOW_FLUSHING
+      || self->downstream_flow_ret == GST_FLOW_EOS) {
       /* Avoid returning with error code when the element is flushing because it would stop the incoming stream */
+      /* Avoid returning with error code when the element got EOS, this allows to keep using the stream after it */
       self->downstream_flow_ret = GST_FLOW_OK;
     } else {
       GST_ERROR_OBJECT (self, "Downstream flow return: %s",
