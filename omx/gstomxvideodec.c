@@ -78,8 +78,7 @@ static gboolean gst_omx_video_dec_decide_allocation (GstVideoDecoder * bdec,
     GstQuery * query);
 static gboolean gst_omx_video_dec_sink_event (GstVideoDecoder * decoder,
     GstEvent * event);
-static GstFlowReturn gst_omx_video_dec_drain (GstVideoDecoder * decoder,
-    gboolean is_eos);
+static GstFlowReturn gst_omx_video_dec_drain (GstVideoDecoder * decoder);
 static OMX_ERRORTYPE gst_omx_video_dec_allocate_output_buffers (GstOMXVideoDec *
     self);
 static OMX_ERRORTYPE gst_omx_video_dec_deallocate_output_buffers (GstOMXVideoDec
@@ -1996,7 +1995,7 @@ gst_omx_video_dec_set_format (GstVideoDecoder * decoder,
 
     GST_DEBUG_OBJECT (self, "Need to disable and drain decoder");
 
-    gst_omx_video_dec_drain (decoder, FALSE);
+    gst_omx_video_dec_drain (decoder);
     gst_omx_video_dec_flush (decoder);
     gst_omx_port_set_flushing (out_port, 5 * GST_SECOND, TRUE);
 
@@ -2639,12 +2638,11 @@ release_error:
 static GstFlowReturn
 gst_omx_video_dec_finish (GstVideoDecoder * decoder)
 {
-  /* Drain without EOS flag to keep using the stream if needed */
-  return gst_omx_video_dec_drain (decoder, FALSE);
+  return gst_omx_video_dec_drain (decoder);
 }
 
 static GstFlowReturn
-gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
+gst_omx_video_dec_drain (GstVideoDecoder * decoder)
 {
   GstOMXVideoDec *self;
   GstOMXVideoDecClass *klass;
@@ -2669,9 +2667,6 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder, gboolean is_eos)
     GST_DEBUG_OBJECT (self, "Component is EOS already");
     return GST_FLOW_OK;
   }
-
-  if (is_eos)
-    self->eos = TRUE;
 
   if (!(klass->cdata.hacks & GST_OMX_HACK_NO_EMPTY_EOS_BUFFER)) {
     GST_WARNING_OBJECT (self, "Component does not support empty EOS buffers");
