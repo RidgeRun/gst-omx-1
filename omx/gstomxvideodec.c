@@ -1709,7 +1709,6 @@ gst_omx_video_dec_start (GstVideoDecoder * decoder)
   self = GST_OMX_VIDEO_DEC (decoder);
 
   self->last_upstream_ts = 0;
-  self->eos = FALSE;
   self->downstream_flow_ret = GST_FLOW_OK;
 
   return TRUE;
@@ -1743,7 +1742,6 @@ gst_omx_video_dec_stop (GstVideoDecoder * decoder)
 
   self->downstream_flow_ret = GST_FLOW_FLUSHING;
   self->started = FALSE;
-  self->eos = FALSE;
 
   g_mutex_lock (&self->drain_lock);
   self->draining = FALSE;
@@ -2244,7 +2242,6 @@ gst_omx_video_dec_reset (GstVideoDecoder * decoder, gboolean hard)
 
   /* Start the srcpad loop again */
   self->last_upstream_ts = 0;
-  self->eos = FALSE;
   self->downstream_flow_ret = GST_FLOW_OK;
 
   GST_DEBUG_OBJECT (self, "Reset decoder");
@@ -2363,12 +2360,6 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
     GST_DEBUG_OBJECT (self, "Got frame after flush start");
     gst_video_codec_frame_unref (frame);
     return GST_FLOW_OK;
-  }
-
-  if (self->eos) {
-    GST_WARNING_OBJECT (self, "Got frame after EOS");
-    gst_video_codec_frame_unref (frame);
-    return GST_FLOW_EOS;
   }
 
   if (!self->started) {
@@ -2661,12 +2652,6 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder)
     return GST_FLOW_OK;
   }
   self->started = FALSE;
-
-  /* Don't send EOS buffer twice, this doesn't work */
-  if (self->eos) {
-    GST_DEBUG_OBJECT (self, "Component is EOS already");
-    return GST_FLOW_OK;
-  }
 
   if (!(klass->cdata.hacks & GST_OMX_HACK_NO_EMPTY_EOS_BUFFER)) {
     GST_WARNING_OBJECT (self, "Component does not support empty EOS buffers");

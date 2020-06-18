@@ -78,9 +78,6 @@ struct _GstOMXVideoDec
   guint output_buffers;
   guint input_buffers;
 
-  /* TRUE if upstream is EOS */
-  gboolean eos;
-
   GstFlowReturn downstream_flow_ret;
 
   /* Internal flag for seek operations */
