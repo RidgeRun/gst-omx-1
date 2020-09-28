@@ -143,6 +143,7 @@ gst_omx_video_dec_class_init (GstOMXVideoDecClass * klass)
   video_decoder_class->handle_frame =
       GST_DEBUG_FUNCPTR (gst_omx_video_dec_handle_frame);
   video_decoder_class->finish = GST_DEBUG_FUNCPTR (gst_omx_video_dec_finish);
+  video_decoder_class->drain = GST_DEBUG_FUNCPTR (gst_omx_video_dec_drain);
   video_decoder_class->decide_allocation =
       GST_DEBUG_FUNCPTR (gst_omx_video_dec_decide_allocation);
   video_decoder_class->sink_event =
@@ -2647,8 +2648,8 @@ gst_omx_video_dec_drain (GstVideoDecoder * decoder)
 
   klass = GST_OMX_VIDEO_DEC_GET_CLASS (self);
 
-  if (!self->started || self->flush_flag) {
-    GST_DEBUG_OBJECT (self, "Component not started yet");
+  if (self->flush_flag) {
+    GST_DEBUG_OBJECT (self, "Component flushing");
     return GST_FLOW_OK;
   }
   self->started = FALSE;
