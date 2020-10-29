@@ -1448,6 +1448,13 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
       (guint) buf->omx_buf->nFlags,
       (guint64) GST_OMX_GET_TICKS (buf->omx_buf->nTimeStamp));
 
+  if (buf->omx_buf->nFilledLen == 0) {
+    GST_DEBUG_OBJECT (self, "Drop empty buffer with flags 0x%08x", (guint) buf->omx_buf->nFlags);
+    gst_omx_port_release_buffer (port, buf);
+    buf = NULL;
+    return;
+  }
+
   GST_VIDEO_DECODER_STREAM_LOCK (self);
   frame = gst_omx_video_find_nearest_frame (buf,
       gst_video_decoder_get_frames (GST_VIDEO_DECODER (self)));
