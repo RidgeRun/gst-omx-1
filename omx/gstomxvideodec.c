@@ -1318,31 +1318,6 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_EOS) {
     goto eos;
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_EMPTY) {
-    if (self->draining) {
-      /* While draining there could be cases the decoder component may need more buffers after
-       * the empty EOS buffer to provide buffers at the output port. If that is the case, send
-       * an extra empty buffer, so that the component doesn't get blocked if no more video frames
-       * are going to arrive. */
-      GST_DEBUG_OBJECT (self, "Send empty buffer to get buffers on the output port");
-      acq_return = gst_omx_port_acquire_buffer (self->dec_in_port, &buf, FALSE);
-      if (acq_return != GST_OMX_ACQUIRE_BUFFER_OK) {
-	GST_ERROR_OBJECT (self, "Failed to acquire buffer for empty case while draining: %d",
-			  acq_return);
-	return;
-      }
-
-      buf->omx_buf->nFilledLen = 0;
-      GST_OMX_SET_TICKS (buf->omx_buf->nTimeStamp,
-			 gst_util_uint64_scale (self->last_upstream_ts, OMX_TICKS_PER_SECOND,
-						GST_SECOND));
-      buf->omx_buf->nTickCount = 0;
-      err = gst_omx_port_release_buffer (self->dec_in_port, buf);
-      if (err != OMX_ErrorNone) {
-	GST_ERROR_OBJECT (self, "Failed to send empty buffer to component: %s (0x%08x)",
-			  gst_omx_error_to_string (err), err);
-	return;
-      }
-    }
 
     return;
   }
@@ -1447,13 +1422,6 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
   GST_DEBUG_OBJECT (self, "Handling buffer: 0x%08x %" G_GUINT64_FORMAT,
       (guint) buf->omx_buf->nFlags,
       (guint64) GST_OMX_GET_TICKS (buf->omx_buf->nTimeStamp));
-
-  if (buf->omx_buf->nFilledLen == 0) {
-    GST_DEBUG_OBJECT (self, "Drop empty buffer with flags 0x%08x", (guint) buf->omx_buf->nFlags);
-    gst_omx_port_release_buffer (port, buf);
-    buf = NULL;
-    return;
-  }
 
   GST_VIDEO_DECODER_STREAM_LOCK (self);
   frame = gst_omx_video_find_nearest_frame (buf,
@@ -2385,6 +2353,14 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
   klass = GST_OMX_VIDEO_DEC_GET_CLASS (self);
 
   GST_DEBUG_OBJECT (self, "Handling frame");
+
+  // In reverse playback, gst video decoder sends a block of frames to decode
+  // as fast as possible, but the component might stall if the rate at which
+  // buffers are pushed to input port is too high, so this usleep helps to slow
+  // down the rate at which buffers are sent to the component and prevent a lockup
+  if (GST_VIDEO_DECODER(self)->input_segment.rate < 0.0) {
+    g_usleep(30);
+  }
 
   GST_VIDEO_DECODER_STREAM_LOCK (self);
   flush_flag = self->flush_flag;
