@@ -2353,6 +2353,14 @@ gst_omx_video_dec_handle_frame (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (self, "Handling frame");
 
+  // In reverse playback, gst video decoder sends a block of frames to decode
+  // as fast as possible, but the component might stall if the rate at which
+  // buffers are pushed to input port is too high, so this usleep helps to slow
+  // down the rate at which buffers are sent to the component and prevent a lockup
+  if (GST_VIDEO_DECODER(self)->input_segment.rate < 0.0) {
+    g_usleep(30);
+  }
+
   GST_VIDEO_DECODER_STREAM_LOCK (self);
   flush_flag = self->flush_flag;
   GST_VIDEO_DECODER_STREAM_UNLOCK (self);
