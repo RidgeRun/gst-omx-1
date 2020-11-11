@@ -1318,7 +1318,6 @@ gst_omx_video_dec_loop (GstOMXVideoDec * self)
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_EOS) {
     goto eos;
   } else if (acq_return == GST_OMX_ACQUIRE_BUFFER_EMPTY) {
-
     return;
   }
 
