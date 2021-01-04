@@ -578,8 +578,11 @@ gst_rr_h264_parse_stop (GstBaseTransform * btrans)
 {
   GstRrH264Parse *self = GST_RR_H264_PARSE (btrans);
 
-  if (self->caps)
+  if (self->caps) {
     gst_caps_unref (self->caps);
+    self->caps = NULL;
+  }
+  self->set_codec_data = FALSE;
 
   return TRUE;
 }
