@@ -628,7 +628,6 @@ gst_omx_video_filter_output_loop (GstPad * pad)
 {
   GstOMXVideoFilter *self;
   GstOMXVideoFilterPrivate *priv;
-  GstOMXVideoFilterClass *klass;
   GstOMXPort *port;
   GstOMXBuffer *buf = NULL;
   GstVideoCodecFrame *frame;
@@ -638,7 +637,6 @@ gst_omx_video_filter_output_loop (GstPad * pad)
 
   self = GST_OMX_VIDEO_FILTER (gst_pad_get_parent (pad));
   priv = self->priv;
-  klass = GST_OMX_VIDEO_FILTER_GET_CLASS (self);
   port = (GstOMXPort *) gst_pad_get_element_private (pad);
 
   if (priv->flush_flag) {
